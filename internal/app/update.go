@@ -4,6 +4,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/e-9/copilot-icq/internal/infra/notifier"
 	"github.com/e-9/copilot-icq/internal/ui/theme"
 )
 
@@ -174,6 +175,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.Err
 		} else {
 			m.input.Reset()
+		}
+
+	case notifier.HookEventMsg:
+		// Hook event received from companion binary
+		if msg.SessionID != "" {
+			m.lastSeen[msg.SessionID] = time.Now()
+			m.sidebar.SetLastSeen(m.lastSeen)
+			if m.selected == nil || m.selected.ID != msg.SessionID {
+				m.unread[msg.SessionID]++
+				m.sidebar.SetUnread(m.unread)
+			} else {
+				cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+			}
+			m.sidebar.SetItems(m.sessions)
 		}
 	}
 
