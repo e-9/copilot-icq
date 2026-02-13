@@ -4,6 +4,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/e-9/copilot-icq/internal/ui/theme"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -95,12 +96,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
-		sidebarHeight := m.height - 2
-		m.sidebar.SetSize(m.sidebar.Width, sidebarHeight)
-		chatWidth := m.width - m.sidebar.Width - 4
-		inputHeight := 3
-		m.chat.SetSize(chatWidth, sidebarHeight-inputHeight)
-		m.input.SetWidth(chatWidth)
+		// Border takes 2 rows (top+bottom) and 2 cols (left+right)
+		borderH := 2
+		borderW := 2
+		statusBarH := 1
+
+		panelHeight := m.height - statusBarH - borderH
+		sidebarInnerW := theme.SidebarWidth
+		chatInnerW := m.width - sidebarInnerW - borderW*2 // both panels have borders
+
+		m.sidebar.SetSize(sidebarInnerW, panelHeight)
+
+		inputHeight := 1
+		inputBorderH := inputHeight + borderH
+		chatInnerH := panelHeight - inputBorderH
+		m.chat.SetSize(chatInnerW, chatInnerH)
+		m.input.SetWidth(chatInnerW)
 
 	case SessionsLoadedMsg:
 		if msg.Err != nil {
