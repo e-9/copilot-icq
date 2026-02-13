@@ -1,6 +1,5 @@
 # Binaries
-copilot-icq
-copilot-icq-hook
+/bin/
 *.exe
 *.exe~
 *.dll
