@@ -65,20 +65,27 @@ func (m Model) View() string {
 
 	headerLeft := title + sessionCount + securityIcon + sendingInfo
 	headerRight := shortcuts
-	headerGap := m.width - lipgloss.Width(headerLeft) - lipgloss.Width(headerRight)
+	headerGap := m.width - lipgloss.Width(headerLeft) - lipgloss.Width(headerRight) - 2
 	if headerGap < 0 {
 		headerGap = 0
 		headerRight = ""
 	}
 	headerBar := lipgloss.NewStyle().
 		Width(m.width).
+		MaxWidth(m.width).
 		Background(lipgloss.Color("236")).
 		Padding(0, 1).
 		Render(headerLeft + lipgloss.NewStyle().Width(headerGap).Render("") + headerRight)
 
 	panelHeight := m.height - headerH - statusBarH - borderH
+	if panelHeight < 1 {
+		panelHeight = 1
+	}
 	sidebarInnerW := theme.SidebarWidth
 	chatInnerW := m.width - sidebarInnerW - borderW*2
+	if chatInnerW < 1 {
+		chatInnerW = 1
+	}
 
 	// Sidebar panel
 	sidebarContent := m.sidebar.View()

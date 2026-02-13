@@ -103,8 +103,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		statusBarH := 1
 
 		panelHeight := m.height - headerH - statusBarH - borderH
+		if panelHeight < 1 {
+			panelHeight = 1
+		}
 		sidebarInnerW := theme.SidebarWidth
 		chatInnerW := m.width - sidebarInnerW - borderW*2
+		if chatInnerW < 1 {
+			chatInnerW = 1
+		}
 
 		m.sidebar.SetSize(sidebarInnerW, panelHeight)
 
