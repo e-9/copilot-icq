@@ -36,7 +36,7 @@ func (m Model) View() string {
 	title := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(theme.Accent).
-		Render("🌸 Copilot ICQ")
+		Render("🟢 Copilot ICQ")
 
 	sessionCount := lipgloss.NewStyle().
 		Foreground(theme.Subtle).

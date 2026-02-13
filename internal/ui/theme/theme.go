@@ -4,7 +4,7 @@ import "github.com/charmbracelet/lipgloss"
 
 var (
 	// Colors
-	Accent     = lipgloss.Color("205") // Pink
+	Accent     = lipgloss.Color("34")  // Green
 	Subtle     = lipgloss.Color("241") // Gray
 	Highlight  = lipgloss.Color("86")  // Cyan-green
 	Warning    = lipgloss.Color("214") // Orange
