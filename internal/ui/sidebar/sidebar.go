@@ -92,11 +92,10 @@ func New(sessions []domain.Session, width, height int) Model {
 	}
 
 	l := list.New(items, d, width, height)
-	l.Title = "🌸 Sessions"
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
-	l.Styles.Title = theme.TitleStyle
 	l.SetShowHelp(false)
+	l.SetShowTitle(false)
 
 	return Model{List: l, Width: width, Height: height, delegate: d}
 }

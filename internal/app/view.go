@@ -29,9 +29,54 @@ func (m Model) View() string {
 
 	borderH := 2
 	borderW := 2
+	headerH := 1
 	statusBarH := 1
 
-	panelHeight := m.height - statusBarH - borderH
+	// Header bar
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(theme.Accent).
+		Render("🌸 Copilot ICQ")
+
+	sessionCount := lipgloss.NewStyle().
+		Foreground(theme.Subtle).
+		Render(fmt.Sprintf(" %d sessions", len(m.sessions)))
+
+	sendingInfo := ""
+	if m.input.IsSending() {
+		sendingInfo = lipgloss.NewStyle().
+			Foreground(theme.Warning).
+			Bold(true).
+			Render("  ⏳ sending...")
+	}
+
+	securityIcon := ""
+	if m.runner != nil {
+		if m.runner.Mode() == runner.ModeScoped {
+			securityIcon = lipgloss.NewStyle().Foreground(theme.Highlight).Render("  🔒 scoped")
+		} else {
+			securityIcon = lipgloss.NewStyle().Foreground(theme.Warning).Render("  ⚠️ full-auto")
+		}
+	}
+
+	shortcuts := lipgloss.NewStyle().
+		Foreground(theme.Subtle).
+		Render("  Tab·Click switch  Enter open/send  Esc back  / filter  q quit")
+
+	headerLeft := title + sessionCount + securityIcon + sendingInfo
+	headerRight := shortcuts
+	headerGap := m.width - lipgloss.Width(headerLeft) - lipgloss.Width(headerRight)
+	if headerGap < 0 {
+		headerGap = 0
+		headerRight = ""
+	}
+	headerBar := lipgloss.NewStyle().
+		Width(m.width).
+		Background(lipgloss.Color("236")).
+		Padding(0, 1).
+		Render(headerLeft + lipgloss.NewStyle().Width(headerGap).Render("") + headerRight)
+
+	panelHeight := m.height - headerH - statusBarH - borderH
 	sidebarInnerW := theme.SidebarWidth
 	chatInnerW := m.width - sidebarInnerW - borderW*2
 
@@ -77,7 +122,7 @@ func (m Model) View() string {
 	// Layout: sidebar | right
 	content := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, rightPanel)
 
-	// Status bar
+	// Status bar — contextual info
 	focusLabel := "sidebar"
 	switch m.focus {
 	case FocusChat:
@@ -88,27 +133,12 @@ func (m Model) View() string {
 
 	sessionInfo := ""
 	if m.selected != nil {
-		sessionInfo = fmt.Sprintf(" · %s", m.selected.DisplayName())
-	}
-
-	securityIcon := ""
-	if m.runner != nil {
-		if m.runner.Mode() == runner.ModeScoped {
-			securityIcon = " · 🔒 scoped"
-		} else {
-			securityIcon = " · ⚠️ full-auto"
-		}
-	}
-
-	sendingInfo := ""
-	if m.input.IsSending() {
-		sendingInfo = " · ⏳ sending..."
+		sessionInfo = fmt.Sprintf(" · 💬 %s (%s)", m.selected.DisplayName(), m.selected.ShortID())
 	}
 
 	statusBar := theme.StatusBarStyle.
 		Width(m.width).
-		Render(fmt.Sprintf("  %d sessions%s%s%s · [%s] · Tab/Click switch · Esc back · q quit",
-			len(m.sessions), sessionInfo, securityIcon, sendingInfo, focusLabel))
+		Render(fmt.Sprintf(" [%s]%s", focusLabel, sessionInfo))
 
-	return lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, headerBar, content, statusBar)
 }

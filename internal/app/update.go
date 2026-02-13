@@ -99,11 +99,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Border takes 2 rows (top+bottom) and 2 cols (left+right)
 		borderH := 2
 		borderW := 2
+		headerH := 1
 		statusBarH := 1
 
-		panelHeight := m.height - statusBarH - borderH
+		panelHeight := m.height - headerH - statusBarH - borderH
 		sidebarInnerW := theme.SidebarWidth
-		chatInnerW := m.width - sidebarInnerW - borderW*2 // both panels have borders
+		chatInnerW := m.width - sidebarInnerW - borderW*2
 
 		m.sidebar.SetSize(sidebarInnerW, panelHeight)
 
