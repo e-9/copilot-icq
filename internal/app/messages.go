@@ -33,3 +33,6 @@ type MessageSentMsg struct {
 	Output    string
 	Err       error
 }
+
+// TickMsg is sent periodically to trigger session rescans.
+type TickMsg struct{}

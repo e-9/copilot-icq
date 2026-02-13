@@ -81,12 +81,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the input area.
 func (m Model) View() string {
-	border := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderTop(true).
-		BorderForeground(lipgloss.Color("238")).
-		Width(m.width - 2).
-		Padding(0, 1)
-
-	return border.Render(m.textInput.View())
+	if m.sending {
+		spinner := lipgloss.NewStyle().
+			Foreground(theme.Warning).
+			Bold(true).
+			Render("⏳ Sending message to Copilot...")
+		return spinner
+	}
+	return m.textInput.View()
 }

@@ -136,7 +136,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the sidebar.
 func (m Model) View() string {
-	return theme.SidebarStyle.Height(m.Height).Render(m.List.View())
+	return m.List.View()
 }
 
 func shortenPath(path string, maxLen int) string {

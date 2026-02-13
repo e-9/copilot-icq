@@ -60,5 +60,6 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadSessions(m.repo),
 		watchFiles(m.watcher),
+		tickEvery(5*time.Second),
 	)
 }

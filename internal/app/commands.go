@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/domain"
@@ -60,4 +61,11 @@ func sendMessage(r *runner.Runner, sessionID, message string) tea.Cmd {
 			Err:       result.Err,
 		}
 	}
+}
+
+// tickEvery returns a Cmd that sends a TickMsg after the given duration.
+func tickEvery(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(_ time.Time) tea.Msg {
+		return TickMsg{}
+	})
 }

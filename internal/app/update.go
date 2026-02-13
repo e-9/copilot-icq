@@ -18,6 +18,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus != FocusInput {
 				return m, tea.Quit
 			}
+		case "esc":
+			if m.focus == FocusInput {
+				m.focus = FocusChat
+				m.input.Blur()
+				return m, nil
+			}
 		case "r":
 			if m.focus != FocusInput {
 				cmds = append(cmds, loadSessions(m.repo))
@@ -55,6 +61,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if text != "" && m.selected != nil && m.runner != nil && !m.input.IsSending() {
 					m.input.SetSending(true)
 					cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
+				}
+			}
+		}
+
+	case tea.MouseMsg:
+		// Determine which panel was clicked based on X coordinate
+		if msg.Action == tea.MouseActionPress || msg.Action == tea.MouseActionMotion {
+			if msg.Button == tea.MouseButtonLeft {
+				if msg.X < m.sidebar.Width+2 {
+					// Clicked on sidebar
+					if m.focus != FocusSidebar {
+						m.focus = FocusSidebar
+						m.input.Blur()
+					}
+				} else if m.height > 0 && msg.Y >= m.height-5 && m.selected != nil {
+					// Clicked on input area (bottom ~3 rows)
+					if m.focus != FocusInput && m.runner != nil {
+						m.focus = FocusInput
+						m.input.Focus()
+					}
+				} else {
+					// Clicked on chat area
+					if m.focus != FocusChat {
+						m.focus = FocusChat
+						m.input.Blur()
+					}
 				}
 			}
 		}
@@ -105,13 +137,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, loadSessions(m.repo))
 		cmds = append(cmds, watchFiles(m.watcher))
 
+	case TickMsg:
+		// Periodic rescan for new sessions
+		cmds = append(cmds, loadSessions(m.repo))
+		cmds = append(cmds, tickEvery(5*time.Second))
+
 	case MessageSentMsg:
 		m.input.SetSending(false)
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else {
 			m.input.Reset()
-			// Response will arrive via file watcher → EventsLoadedMsg
 		}
 	}
 
