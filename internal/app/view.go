@@ -87,11 +87,12 @@ func (m Model) View() string {
 		chatInnerW = 1
 	}
 
-	// Sidebar panel
+	// Sidebar panel — MaxHeight clips overflow from list component
+	sidebarRenderedH := panelHeight + borderH
 	sidebarContent := m.sidebar.View()
-	sidebarBorder := unfocusedBorder.Width(sidebarInnerW).Height(panelHeight)
+	sidebarBorder := unfocusedBorder.Width(sidebarInnerW).Height(panelHeight).MaxHeight(sidebarRenderedH)
 	if m.focus == FocusSidebar {
-		sidebarBorder = focusedBorder.Width(sidebarInnerW).Height(panelHeight)
+		sidebarBorder = focusedBorder.Width(sidebarInnerW).Height(panelHeight).MaxHeight(sidebarRenderedH)
 	}
 	sidebarView := sidebarBorder.Render(sidebarContent)
 
@@ -101,25 +102,27 @@ func (m Model) View() string {
 		placeholder := lipgloss.NewStyle().
 			Foreground(theme.Subtle).
 			Render("  Select a session and press Enter to view conversation")
-		rightBorder := unfocusedBorder.Width(chatInnerW).Height(panelHeight)
+		rightBorder := unfocusedBorder.Width(chatInnerW).Height(panelHeight).MaxHeight(sidebarRenderedH)
 		rightPanel = rightBorder.Render(placeholder)
 	} else {
 		inputInnerH := 1
 		chatInnerH := panelHeight - inputInnerH - borderH
+		chatRenderedH := chatInnerH + borderH
+		inputRenderedH := inputInnerH + borderH
 
 		// Chat viewport
 		chatContent := m.chat.View()
-		chatBorder := unfocusedBorder.Width(chatInnerW).Height(chatInnerH)
+		chatBorder := unfocusedBorder.Width(chatInnerW).Height(chatInnerH).MaxHeight(chatRenderedH)
 		if m.focus == FocusChat {
-			chatBorder = focusedBorder.Width(chatInnerW).Height(chatInnerH)
+			chatBorder = focusedBorder.Width(chatInnerW).Height(chatInnerH).MaxHeight(chatRenderedH)
 		}
 		chatView := chatBorder.Render(chatContent)
 
 		// Input area
 		inputContent := m.input.View()
-		inputBorder := unfocusedBorder.Width(chatInnerW).Height(inputInnerH)
+		inputBorder := unfocusedBorder.Width(chatInnerW).Height(inputInnerH).MaxHeight(inputRenderedH)
 		if m.focus == FocusInput {
-			inputBorder = focusedBorder.Width(chatInnerW).Height(inputInnerH)
+			inputBorder = focusedBorder.Width(chatInnerW).Height(inputInnerH).MaxHeight(inputRenderedH)
 		}
 		inputView := inputBorder.Render(inputContent)
 

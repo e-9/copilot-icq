@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/ui/theme"
 )
@@ -135,7 +136,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 // View renders the sidebar.
 func (m Model) View() string {
-	return m.List.View()
+	// The list.View() may render more lines than allocated height.
+	// We must truncate to prevent pushing other UI elements off-screen.
+	content := m.List.View()
+	return lipgloss.NewStyle().
+		Width(m.Width).
+		Height(m.Height).
+		MaxHeight(m.Height).
+		Render(content)
 }
 
 func shortenPath(path string, maxLen int) string {
