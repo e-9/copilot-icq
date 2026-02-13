@@ -26,6 +26,7 @@ func (i Item) FilterValue() string { return i.Session.DisplayName() + " " + i.Se
 type ItemDelegate struct {
 	Unread   map[string]int
 	LastSeen map[string]time.Time
+	ActiveID string
 }
 
 func (d ItemDelegate) Height() int                             { return 2 }
@@ -62,6 +63,23 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		icon = "◉"
 	}
 
+	// Group separator: render a dim line between unread and idle groups
+	separator := ""
+	if d.ActiveID != "" && index > 0 {
+		prevItem, ok := m.Items()[index-1].(Item)
+		if ok {
+			prevUnread := d.Unread[prevItem.Session.ID] > 0
+			prevIsActive := prevItem.Session.ID == d.ActiveID
+			curUnread := d.Unread[item.Session.ID] > 0
+			curIsActive := item.Session.ID == d.ActiveID
+
+			// Show separator when transitioning between groups
+			if (prevIsActive && !curIsActive) || (prevUnread && !curUnread && !curIsActive) {
+				separator = lipgloss.NewStyle().Foreground(theme.Subtle).Render("  ─────────────────────") + "\n"
+			}
+		}
+	}
+
 	if index == m.Index() {
 		title = theme.SelectedItemStyle.Render(icon+" "+title) + badge
 		desc = theme.DimItemStyle.Render("  " + desc)
@@ -70,7 +88,7 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		desc = theme.DimItemStyle.Render("  " + desc)
 	}
 
-	fmt.Fprintf(w, "%s\n%s", title, desc)
+	fmt.Fprintf(w, "%s%s\n%s", separator, title, desc)
 }
 
 // Model wraps the bubbles list component for our sidebar.
@@ -158,6 +176,7 @@ func shortenPath(path string, maxLen int) string {
 // SetActiveID sets the currently viewed session so it sorts to the top.
 func (m *Model) SetActiveID(id string) {
 	m.activeID = id
+	m.delegate.ActiveID = id
 }
 
 // SetItems replaces the session list with smart sorting.

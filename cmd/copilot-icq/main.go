@@ -13,6 +13,12 @@ import (
 )
 
 func main() {
+	// Handle subcommands
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		runDoctor()
+		return
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -40,6 +46,30 @@ func main() {
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runDoctor() {
+	fmt.Println("🟢 Copilot ICQ — Doctor")
+	fmt.Println()
+
+	results := config.Doctor()
+	allOK := true
+	for _, r := range results {
+		icon := "✅"
+		if !r.OK {
+			icon = "❌"
+			allOK = false
+		}
+		fmt.Printf("  %s %s: %s\n", icon, r.Name, r.Detail)
+	}
+
+	fmt.Println()
+	if allOK {
+		fmt.Println("  All checks passed! Run copilot-icq to start.")
+	} else {
+		fmt.Println("  Some checks failed. Fix the issues above and try again.")
 		os.Exit(1)
 	}
 }

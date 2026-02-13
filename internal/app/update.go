@@ -29,6 +29,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus != FocusInput {
 				cmds = append(cmds, loadSessions(m.repo))
 			}
+		case "t":
+			if m.focus == FocusChat {
+				m.chat.ToggleAllToolCalls()
+				return m, nil
+			}
 		case "tab":
 			switch m.focus {
 			case FocusSidebar:

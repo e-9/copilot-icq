@@ -61,7 +61,7 @@ func (m Model) View() string {
 
 	shortcuts := lipgloss.NewStyle().
 		Foreground(theme.Subtle).
-		Render("  Tab·Click switch  Enter open/send  Esc back  / filter  q quit")
+		Render("  Tab·Click switch  Enter open/send  t tools  Esc back  / filter  q quit")
 
 	headerLeft := title + sessionCount + securityIcon + sendingInfo
 	headerRight := shortcuts
