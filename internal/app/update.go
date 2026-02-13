@@ -53,7 +53,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selected = s
 					m.focus = FocusChat
 					m.unread[s.ID] = 0
+					m.sidebar.SetActiveID(s.ID)
 					m.sidebar.SetUnread(m.unread)
+					m.sidebar.SetItems(m.sessions) // re-sort with new active
 					m.watcher.WatchSession(s.ID)
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
 				}
@@ -149,6 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.unread[msg.SessionID]++
 			m.sidebar.SetUnread(m.unread)
 		}
+		m.sidebar.SetItems(m.sessions) // re-sort: unread sessions bubble up
 		cmds = append(cmds, watchFiles(m.watcher))
 
 	case SessionDirChangedMsg:

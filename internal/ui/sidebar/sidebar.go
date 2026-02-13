@@ -3,6 +3,7 @@ package sidebar
 import (
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -78,6 +79,7 @@ type Model struct {
 	Width    int
 	Height   int
 	delegate *ItemDelegate
+	activeID string // currently viewed session ID
 }
 
 // New creates a new sidebar model.
@@ -153,11 +155,85 @@ func shortenPath(path string, maxLen int) string {
 	return "…" + path[len(path)-maxLen+1:]
 }
 
-// SetItems replaces the session list.
+// SetActiveID sets the currently viewed session so it sorts to the top.
+func (m *Model) SetActiveID(id string) {
+	m.activeID = id
+}
+
+// SetItems replaces the session list with smart sorting.
 func (m *Model) SetItems(sessions []domain.Session) {
-	items := make([]list.Item, len(sessions))
-	for i, s := range sessions {
+	// Remember which session the cursor is on
+	var cursorID string
+	if sel := m.SelectedSession(); sel != nil {
+		cursorID = sel.ID
+	}
+
+	sorted := m.sortSessions(sessions)
+
+	items := make([]list.Item, len(sorted))
+	for i, s := range sorted {
 		items[i] = Item{Session: s}
 	}
 	m.List.SetItems(items)
+
+	// Restore cursor to the same session
+	if cursorID != "" {
+		for i, s := range sorted {
+			if s.ID == cursorID {
+				m.List.Select(i)
+				break
+			}
+		}
+	}
+}
+
+// sortSessions orders sessions by priority:
+// 1. Active session (currently viewed) at top
+// 2. Sessions with unread messages, sorted by most recent activity
+// 3. Idle sessions, sorted by most recently updated
+func (m *Model) sortSessions(sessions []domain.Session) []domain.Session {
+	result := make([]domain.Session, len(sessions))
+	copy(result, sessions)
+
+	sort.SliceStable(result, func(i, j int) bool {
+		si, sj := result[i], result[j]
+
+		// Active session always first
+		if si.ID == m.activeID && sj.ID != m.activeID {
+			return true
+		}
+		if sj.ID == m.activeID && si.ID != m.activeID {
+			return false
+		}
+
+		// Unread sessions before idle
+		ui := m.delegate.Unread[si.ID]
+		uj := m.delegate.Unread[sj.ID]
+		hasUnreadI := ui > 0
+		hasUnreadJ := uj > 0
+
+		if hasUnreadI && !hasUnreadJ {
+			return true
+		}
+		if hasUnreadJ && !hasUnreadI {
+			return false
+		}
+
+		// Within same group, sort by most recent activity
+		ti := m.lastActivity(si)
+		tj := m.lastActivity(sj)
+		return ti.After(tj)
+	})
+
+	return result
+}
+
+// lastActivity returns the most recent timestamp for a session.
+func (m *Model) lastActivity(s domain.Session) time.Time {
+	if t, ok := m.delegate.LastSeen[s.ID]; ok {
+		if t.After(s.UpdatedAt) {
+			return t
+		}
+	}
+	return s.UpdatedAt
 }
