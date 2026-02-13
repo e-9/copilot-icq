@@ -16,46 +16,46 @@ func (m Model) View() string {
 		return fmt.Sprintf("Error: %v\nPress q to quit.", m.err)
 	}
 
-	// Sidebar
+	// Sidebar with focus indicator
 	sidebarView := m.sidebar.View()
-
-	// Chat panel (placeholder — Phase 2)
-	chatWidth := m.width - theme.SidebarWidth - 4
-	chatHeight := m.height - 2
-
-	var chatContent string
-	if m.selected != nil {
-		chatContent = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(theme.Accent).
-			Render(m.selected.DisplayName()) +
-			"\n" +
-			lipgloss.NewStyle().
-				Foreground(theme.Subtle).
-				Render(fmt.Sprintf("ID: %s\nCWD: %s\nCreated: %s\nUpdated: %s",
-					m.selected.ID,
-					m.selected.CWD,
-					m.selected.CreatedAt.Format("2006-01-02 15:04"),
-					m.selected.UpdatedAt.Format("2006-01-02 15:04"),
-				))
-	} else {
-		chatContent = lipgloss.NewStyle().
-			Foreground(theme.Subtle).
-			Render("Select a session to view")
+	if m.focus == FocusSidebar {
+		sidebarView = lipgloss.NewStyle().
+			BorderForeground(theme.Accent).
+			Render(sidebarView)
 	}
 
-	chatPanel := theme.ChatPanelStyle.
-		Width(chatWidth).
-		Height(chatHeight).
-		Render(chatContent)
+	// Chat panel
+	chatView := m.chat.View()
+	if m.selected == nil {
+		chatWidth := m.width - theme.SidebarWidth - 4
+		chatView = lipgloss.NewStyle().
+			Width(chatWidth).
+			Height(m.height - 2).
+			Foreground(theme.Subtle).
+			Render("  Select a session and press Enter to view conversation")
+	}
+	if m.focus == FocusChat {
+		chatView = lipgloss.NewStyle().
+			BorderForeground(theme.Accent).
+			Render(chatView)
+	}
 
 	// Layout: sidebar | chat
-	content := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, chatPanel)
+	content := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, chatView)
 
 	// Status bar
+	focusLabel := "sidebar"
+	if m.focus == FocusChat {
+		focusLabel = "chat"
+	}
+	sessionInfo := ""
+	if m.selected != nil {
+		sessionInfo = fmt.Sprintf(" · %s", m.selected.DisplayName())
+	}
 	statusBar := theme.StatusBarStyle.
 		Width(m.width).
-		Render(fmt.Sprintf("  %d sessions · ↑↓ navigate · r refresh · q quit", len(m.sessions)))
+		Render(fmt.Sprintf("  %d sessions%s · [%s] · Tab switch · ↑↓ navigate · Enter open · r refresh · q quit",
+			len(m.sessions), sessionInfo, focusLabel))
 
 	return lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
 }

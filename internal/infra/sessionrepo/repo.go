@@ -20,6 +20,11 @@ func New(basePath string) *Repo {
 	return &Repo{basePath: basePath}
 }
 
+// BasePath returns the session-state directory path.
+func (r *Repo) BasePath() string {
+	return r.basePath
+}
+
 // List returns all discovered sessions, sorted by UpdatedAt descending (most recent first).
 func (r *Repo) List() ([]domain.Session, error) {
 	entries, err := os.ReadDir(r.basePath)

@@ -10,7 +10,9 @@ type SessionsLoadedMsg struct {
 	Err      error
 }
 
-// SessionSelectedMsg is sent when a session is selected in the sidebar.
-type SessionSelectedMsg struct {
-	Session domain.Session
+// EventsLoadedMsg is sent when a session's events are parsed.
+type EventsLoadedMsg struct {
+	SessionID string
+	Messages  []domain.Message
+	Err       error
 }
