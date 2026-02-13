@@ -7,6 +7,7 @@ import (
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/eventparser"
 	"github.com/e-9/copilot-icq/internal/infra/sessionrepo"
+	"github.com/e-9/copilot-icq/internal/infra/watcher"
 )
 
 // loadSessions returns a Cmd that discovers sessions from disk.
@@ -28,5 +29,19 @@ func loadEvents(basePath string, session domain.Session) tea.Cmd {
 		}
 		messages := domain.EventsToMessages(events)
 		return EventsLoadedMsg{SessionID: session.ID, Messages: messages}
+	}
+}
+
+// watchFiles returns a Cmd that listens for file system changes.
+func watchFiles(w *watcher.Watcher) tea.Cmd {
+	return func() tea.Msg {
+		evt := <-w.Events()
+		switch e := evt.(type) {
+		case watcher.EventFileChanged:
+			return FileChangedMsg{e}
+		case watcher.SessionDirChanged:
+			return SessionDirChangedMsg{}
+		}
+		return nil
 	}
 }

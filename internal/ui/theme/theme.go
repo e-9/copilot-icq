@@ -30,6 +30,10 @@ var (
 	DimItemStyle = lipgloss.NewStyle().
 			Foreground(Subtle)
 
+	UnreadBadgeStyle = lipgloss.NewStyle().
+				Foreground(Warning).
+				Bold(true)
+
 	// Title
 	TitleStyle = lipgloss.NewStyle().
 			Bold(true).

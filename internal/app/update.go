@@ -1,6 +1,10 @@
 package app
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
@@ -24,6 +28,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if s := m.sidebar.SelectedSession(); s != nil {
 					m.selected = s
 					m.focus = FocusChat
+					m.unread[s.ID] = 0
+					m.sidebar.SetUnread(m.unread)
+					// Watch this session for live updates
+					m.watcher.WatchSession(s.ID)
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
 				}
 			}
@@ -45,6 +53,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.sessions = msg.Sessions
 		m.sidebar.SetItems(msg.Sessions)
+		// Watch all sessions for updates
+		for _, s := range msg.Sessions {
+			m.watcher.WatchSession(s.ID)
+		}
 
 	case EventsLoadedMsg:
 		if msg.Err != nil {
@@ -54,6 +66,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected != nil && m.selected.ID == msg.SessionID {
 			m.chat.SetMessages(msg.Messages)
 		}
+
+	case FileChangedMsg:
+		m.lastSeen[msg.SessionID] = time.Now()
+		m.sidebar.SetLastSeen(m.lastSeen)
+		if m.selected != nil && m.selected.ID == msg.SessionID {
+			// Reload events for the active session
+			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+		} else {
+			// Increment unread count for inactive sessions
+			m.unread[msg.SessionID]++
+			m.sidebar.SetUnread(m.unread)
+		}
+		// Re-subscribe to watcher
+		cmds = append(cmds, watchFiles(m.watcher))
+
+	case SessionDirChangedMsg:
+		// New session appeared, refresh list
+		cmds = append(cmds, loadSessions(m.repo))
+		cmds = append(cmds, watchFiles(m.watcher))
 	}
 
 	// Route input to focused panel

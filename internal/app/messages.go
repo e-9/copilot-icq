@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/e-9/copilot-icq/internal/domain"
+	"github.com/e-9/copilot-icq/internal/infra/watcher"
 )
 
 // SessionsLoadedMsg is sent when sessions are discovered from disk.
@@ -16,3 +17,11 @@ type EventsLoadedMsg struct {
 	Messages  []domain.Message
 	Err       error
 }
+
+// FileChangedMsg wraps a watcher event for Bubble Tea.
+type FileChangedMsg struct {
+	watcher.EventFileChanged
+}
+
+// SessionDirChangedMsg wraps a session directory change.
+type SessionDirChangedMsg struct{}
