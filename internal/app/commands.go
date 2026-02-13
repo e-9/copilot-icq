@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/eventparser"
+	"github.com/e-9/copilot-icq/internal/infra/runner"
 	"github.com/e-9/copilot-icq/internal/infra/sessionrepo"
 	"github.com/e-9/copilot-icq/internal/infra/watcher"
 )
@@ -43,5 +45,19 @@ func watchFiles(w *watcher.Watcher) tea.Cmd {
 			return SessionDirChangedMsg{}
 		}
 		return nil
+	}
+}
+
+// sendMessage dispatches a message to a copilot session via the runner.
+func sendMessage(r *runner.Runner, sessionID, message string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		result := r.Send(ctx, sessionID, message)
+		return MessageSentMsg{
+			SessionID: result.SessionID,
+			Success:   result.Success,
+			Output:    result.Output,
+			Err:       result.Err,
+		}
 	}
 }

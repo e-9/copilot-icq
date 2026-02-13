@@ -12,15 +12,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "q":
+			if m.focus != FocusInput {
+				return m, tea.Quit
+			}
 		case "r":
-			cmds = append(cmds, loadSessions(m.repo))
+			if m.focus != FocusInput {
+				cmds = append(cmds, loadSessions(m.repo))
+			}
 		case "tab":
-			if m.focus == FocusSidebar {
+			switch m.focus {
+			case FocusSidebar:
 				m.focus = FocusChat
-			} else {
+				m.input.Blur()
+			case FocusChat:
+				if m.selected != nil && m.runner != nil {
+					m.focus = FocusInput
+					m.input.Focus()
+				} else {
+					m.focus = FocusSidebar
+					m.input.Blur()
+				}
+			case FocusInput:
 				m.focus = FocusSidebar
+				m.input.Blur()
 			}
 			return m, nil
 		case "enter":
@@ -30,9 +47,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.focus = FocusChat
 					m.unread[s.ID] = 0
 					m.sidebar.SetUnread(m.unread)
-					// Watch this session for live updates
 					m.watcher.WatchSession(s.ID)
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
+				}
+			} else if m.focus == FocusInput {
+				text := m.input.Value()
+				if text != "" && m.selected != nil && m.runner != nil && !m.input.IsSending() {
+					m.input.SetSending(true)
+					cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
 				}
 			}
 		}
@@ -44,7 +66,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		sidebarHeight := m.height - 2
 		m.sidebar.SetSize(m.sidebar.Width, sidebarHeight)
 		chatWidth := m.width - m.sidebar.Width - 4
-		m.chat.SetSize(chatWidth, sidebarHeight)
+		inputHeight := 3
+		m.chat.SetSize(chatWidth, sidebarHeight-inputHeight)
+		m.input.SetWidth(chatWidth)
 
 	case SessionsLoadedMsg:
 		if msg.Err != nil {
@@ -53,7 +77,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.sessions = msg.Sessions
 		m.sidebar.SetItems(msg.Sessions)
-		// Watch all sessions for updates
 		for _, s := range msg.Sessions {
 			m.watcher.WatchSession(s.ID)
 		}
@@ -71,30 +94,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastSeen[msg.SessionID] = time.Now()
 		m.sidebar.SetLastSeen(m.lastSeen)
 		if m.selected != nil && m.selected.ID == msg.SessionID {
-			// Reload events for the active session
 			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
 		} else {
-			// Increment unread count for inactive sessions
 			m.unread[msg.SessionID]++
 			m.sidebar.SetUnread(m.unread)
 		}
-		// Re-subscribe to watcher
 		cmds = append(cmds, watchFiles(m.watcher))
 
 	case SessionDirChangedMsg:
-		// New session appeared, refresh list
 		cmds = append(cmds, loadSessions(m.repo))
 		cmds = append(cmds, watchFiles(m.watcher))
+
+	case MessageSentMsg:
+		m.input.SetSending(false)
+		if msg.Err != nil {
+			m.err = msg.Err
+		} else {
+			m.input.Reset()
+			// Response will arrive via file watcher → EventsLoadedMsg
+		}
 	}
 
 	// Route input to focused panel
-	if m.focus == FocusSidebar {
+	switch m.focus {
+	case FocusSidebar:
 		var cmd tea.Cmd
 		m.sidebar, cmd = m.sidebar.Update(msg)
 		cmds = append(cmds, cmd)
-	} else {
+	case FocusChat:
 		var cmd tea.Cmd
 		m.chat, cmd = m.chat.Update(msg)
+		cmds = append(cmds, cmd)
+	case FocusInput:
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 

@@ -1,0 +1,92 @@
+package input
+
+import (
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/e-9/copilot-icq/internal/ui/theme"
+)
+
+// Model represents the message input area at the bottom of the chat panel.
+type Model struct {
+	textInput textinput.Model
+	width     int
+	sending   bool
+}
+
+// New creates a new input model.
+func New(width int) Model {
+	ti := textinput.New()
+	ti.Placeholder = "Type a message... (Enter to send)"
+	ti.CharLimit = 4096
+	ti.Width = width - 4
+	ti.Prompt = "❯ "
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(theme.Accent)
+
+	return Model{
+		textInput: ti,
+		width:     width,
+	}
+}
+
+// Focus gives keyboard focus to the input.
+func (m *Model) Focus() {
+	m.textInput.Focus()
+}
+
+// Blur removes keyboard focus.
+func (m *Model) Blur() {
+	m.textInput.Blur()
+}
+
+// SetWidth updates the input width.
+func (m *Model) SetWidth(w int) {
+	m.width = w
+	m.textInput.Width = w - 4
+}
+
+// Value returns the current input text.
+func (m Model) Value() string {
+	return m.textInput.Value()
+}
+
+// Reset clears the input.
+func (m *Model) Reset() {
+	m.textInput.Reset()
+}
+
+// SetSending toggles the sending state.
+func (m *Model) SetSending(sending bool) {
+	m.sending = sending
+	if sending {
+		m.textInput.Placeholder = "Sending..."
+		m.Blur()
+	} else {
+		m.textInput.Placeholder = "Type a message... (Enter to send)"
+		m.Focus()
+	}
+}
+
+// IsSending returns whether a message is being sent.
+func (m Model) IsSending() bool {
+	return m.sending
+}
+
+// Update handles textinput messages.
+func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.textInput, cmd = m.textInput.Update(msg)
+	return m, cmd
+}
+
+// View renders the input area.
+func (m Model) View() string {
+	border := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderTop(true).
+		BorderForeground(lipgloss.Color("238")).
+		Width(m.width - 2).
+		Padding(0, 1)
+
+	return border.Render(m.textInput.View())
+}

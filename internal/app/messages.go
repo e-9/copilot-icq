@@ -25,3 +25,11 @@ type FileChangedMsg struct {
 
 // SessionDirChangedMsg wraps a session directory change.
 type SessionDirChangedMsg struct{}
+
+// MessageSentMsg is returned when a message has been dispatched to copilot.
+type MessageSentMsg struct {
+	SessionID string
+	Success   bool
+	Output    string
+	Err       error
+}

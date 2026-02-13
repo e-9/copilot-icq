@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/app"
 	"github.com/e-9/copilot-icq/internal/config"
+	"github.com/e-9/copilot-icq/internal/infra/runner"
 	"github.com/e-9/copilot-icq/internal/infra/sessionrepo"
 	"github.com/e-9/copilot-icq/internal/infra/watcher"
 )
@@ -28,7 +29,13 @@ func main() {
 	defer w.Close()
 	go w.Start()
 
-	model := app.NewModel(repo, w)
+	// Create runner for sending messages (nil if copilot not found)
+	var r *runner.Runner
+	if cfg.CopilotBinPath != "" {
+		r = runner.New(cfg.CopilotBinPath, runner.ModeScoped)
+	}
+
+	model := app.NewModel(repo, w, r)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
