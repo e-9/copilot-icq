@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,8 @@ type ToolCall struct {
 	Command  string   // for bash tools, the command being run/requested
 	Question string   // for ask_user tools, the question text
 	Choices  []string // for ask_user tools, the selectable options
+	FilePath string   // for edit/create/apply_patch tools, the target file
+	Patch    string   // for edit/apply_patch tools, the diff content
 }
 
 // ToolCallStatus tracks the state of a tool invocation.
@@ -95,6 +98,33 @@ func EventsToMessages(events []Event) []Message {
 						tc.Question = args.Question
 						tc.Choices = args.Choices
 					}
+				}
+				// Extract file path for edit/create tools
+				if tr.Name == "edit" || tr.Name == "create" {
+					var args struct {
+						Path   string `json:"path"`
+						OldStr string `json:"old_str"`
+						NewStr string `json:"new_str"`
+					}
+					if err := parseJSON(tr.Arguments, &args); err == nil {
+						tc.FilePath = args.Path
+						if args.OldStr != "" || args.NewStr != "" {
+							tc.Patch = formatEditDiff(args.OldStr, args.NewStr)
+						}
+					}
+				}
+				// Extract file paths from apply_patch (Codex/GPT format)
+				if tr.Name == "apply_patch" {
+					patch := string(tr.Arguments)
+					// Arguments is a raw string, not JSON object
+					if len(patch) > 0 && patch[0] == '"' {
+						var s string
+						if err := parseJSON(tr.Arguments, &s); err == nil {
+							patch = s
+						}
+					}
+					tc.Patch = patch
+					tc.FilePath = extractPatchFiles(patch)
 				}
 				toolCalls = append(toolCalls, tc)
 				msgIdx := len(messages) // will be this message's index
@@ -164,4 +194,34 @@ func EventsToMessages(events []Event) []Message {
 
 func parseJSON(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
+}
+
+// formatEditDiff creates a simple diff representation from old/new strings.
+func formatEditDiff(oldStr, newStr string) string {
+	var sb strings.Builder
+	if oldStr != "" {
+		for _, line := range strings.Split(oldStr, "\n") {
+			sb.WriteString("- " + line + "\n")
+		}
+	}
+	if newStr != "" {
+		for _, line := range strings.Split(newStr, "\n") {
+			sb.WriteString("+ " + line + "\n")
+		}
+	}
+	return sb.String()
+}
+
+// extractPatchFiles extracts file paths from an apply_patch unified diff.
+func extractPatchFiles(patch string) string {
+	var files []string
+	for _, line := range strings.Split(patch, "\n") {
+		trimmed := strings.TrimSpace(line)
+		for _, prefix := range []string{"*** Update File: ", "*** Add File: ", "*** Delete File: "} {
+			if strings.HasPrefix(trimmed, prefix) {
+				files = append(files, strings.TrimPrefix(trimmed, prefix))
+			}
+		}
+	}
+	return strings.Join(files, ", ")
 }
