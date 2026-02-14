@@ -147,6 +147,11 @@ func (m *Model) SetLastSeen(lastSeen map[string]time.Time) {
 	m.delegate.LastSeen = lastSeen
 }
 
+// IsFiltering returns true if the list is in active filter mode.
+func (m Model) IsFiltering() bool {
+	return m.List.FilterState() == list.Filtering
+}
+
 // Update handles messages for the sidebar list.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -186,6 +191,9 @@ func (m *Model) SetItems(sessions []domain.Session) {
 	if sel := m.SelectedSession(); sel != nil {
 		cursorID = sel.ID
 	}
+
+	// Reset any active filter to prevent empty list after filter+select
+	m.List.ResetFilter()
 
 	sorted := m.sortSessions(sessions)
 

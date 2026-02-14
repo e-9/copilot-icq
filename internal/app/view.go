@@ -104,7 +104,22 @@ func (m Model) View() string {
 
 	// Right panel (chat + input)
 	var rightPanel string
-	if m.selected == nil {
+	if m.renaming {
+		// Show rename input in the right panel unconditionally
+		renameLabel := lipgloss.NewStyle().
+			Foreground(theme.Accent).Bold(true).
+			Render("  ✏️  Rename session (Enter to save, Esc to cancel)")
+		labelBorder := unfocusedBorder.Width(chatInnerW).Height(panelHeight - 1 - borderH).MaxHeight(sidebarRenderedH - 1 - borderH)
+		labelView := labelBorder.Render(renameLabel)
+
+		inputInnerH := 1
+		inputRenderedH := inputInnerH + borderH
+		inputContent := m.input.View()
+		inputBorder := focusedBorder.Width(chatInnerW).Height(inputInnerH).MaxHeight(inputRenderedH)
+		inputView := inputBorder.Render(inputContent)
+
+		rightPanel = lipgloss.JoinVertical(lipgloss.Left, labelView, inputView)
+	} else if m.selected == nil {
 		placeholder := lipgloss.NewStyle().
 			Foreground(theme.Subtle).
 			Render("  Select a session and press Enter to view conversation")

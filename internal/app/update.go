@@ -111,7 +111,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
-			if m.focus == FocusSidebar {
+			if m.focus == FocusSidebar && !m.sidebar.IsFiltering() {
 				if s := m.sidebar.SelectedSession(); s != nil {
 					m.selected = s
 					m.focus = FocusChat
