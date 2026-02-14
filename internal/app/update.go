@@ -179,11 +179,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					text := m.input.Value()
 					if text != "" && m.selected != nil && !m.input.IsSending() {
 						m.input.SetSending(true)
-						// Use PTY mode if configured, otherwise fire-and-forget
+						cwd := m.selected.CWD
 						if m.copilotBin != "" && m.cfg != nil && m.cfg.SecurityMode == "interactive" {
-							cmds = append(cmds, m.spawnPTYSession(m.selected.ID, text))
+							cmds = append(cmds, m.spawnPTYSession(m.selected.ID, text, cwd))
 						} else if m.runner != nil {
-							cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
+							cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text, cwd))
 						}
 					}
 				}
@@ -377,9 +377,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // spawnPTYSession launches an interactive copilot session in PTY mode.
-func (m *Model) spawnPTYSession(sessionID, message string) tea.Cmd {
+func (m *Model) spawnPTYSession(sessionID, message, cwd string) tea.Cmd {
 	return func() tea.Msg {
-		session, err := ptyproxy.Spawn(m.copilotBin, sessionID, message)
+		session, err := ptyproxy.Spawn(m.copilotBin, sessionID, message, cwd)
 		if err != nil {
 			return MessageSentMsg{
 				SessionID: sessionID,

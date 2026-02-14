@@ -55,7 +55,9 @@ func New(copilotBin string, mode SecurityMode) *Runner {
 }
 
 // Send dispatches a message to a Copilot CLI session and waits for completion.
-func (r *Runner) Send(ctx context.Context, sessionID, message string) Result {
+// The cwd parameter sets the working directory for the subprocess (should match
+// the target session's working directory).
+func (r *Runner) Send(ctx context.Context, sessionID, message, cwd string) Result {
 	args := []string{
 		"-p", message,
 		"--resume", sessionID,
@@ -70,6 +72,9 @@ func (r *Runner) Send(ctx context.Context, sessionID, message string) Result {
 	}
 
 	cmd := exec.CommandContext(ctx, r.copilotBin, args...)
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

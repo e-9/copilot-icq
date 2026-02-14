@@ -23,12 +23,16 @@ type Session struct {
 
 // Spawn starts an interactive copilot session in a PTY.
 // It runs: copilot -i "message" --resume <sessionID>
-func Spawn(copilotBin, sessionID, message string, extraArgs ...string) (*Session, error) {
+// The cwd parameter sets the working directory (should match the session's CWD).
+func Spawn(copilotBin, sessionID, message, cwd string, extraArgs ...string) (*Session, error) {
 	args := []string{"-i", message, "--resume", sessionID}
 	args = append(args, extraArgs...)
 
 	cmd := exec.Command(copilotBin, args...)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
