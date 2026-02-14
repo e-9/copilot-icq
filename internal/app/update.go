@@ -318,8 +318,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PTYOutputMsg:
 		if m.selected != nil && m.selected.ID == msg.SessionID {
 			m.streamBuffer += msg.Chunk.Cleaned
-			// Reload events to pick up any new content written by the PTY session
-			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+			// No explicit reload needed — fsnotify watcher handles events.jsonl updates
 		}
 		if m.activePTY != nil && m.ptySessionID == msg.SessionID {
 			cmds = append(cmds, streamPTY(m.activePTY, m.ptySessionID))
