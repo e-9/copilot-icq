@@ -66,4 +66,50 @@ func TestEventsToMessages(t *testing.T) {
 	if messages[2].ToolCalls[0].Name != "bash" {
 		t.Errorf("tool call name = %q, want bash", messages[2].ToolCalls[0].Name)
 	}
+	if messages[2].ToolCalls[0].Status != ToolCallComplete {
+		t.Errorf("tool call status = %q, want complete", messages[2].ToolCalls[0].Status)
+	}
+	if messages[2].ToolCalls[0].Summary != "done" {
+		t.Errorf("tool call summary = %q, want 'done'", messages[2].ToolCalls[0].Summary)
+	}
+}
+
+func TestToolApprovalPending(t *testing.T) {
+	// Simulates the case where assistant requests a bash tool, tool.execution_start fires,
+	// but tool.execution_complete never arrives (waiting for user approval in terminal)
+	events := []Event{
+		{
+			Type:      EventAssistantMessage,
+			Data:      json.RawMessage(`{"messageId":"m1","content":"Running command:","toolRequests":[{"toolCallId":"tc1","name":"bash","arguments":{"command":"echo hello"},"type":"function"}]}`),
+			ID:        "e1",
+			Timestamp: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			Type:      EventToolExecutionStart,
+			Data:      json.RawMessage(`{"toolCallId":"tc1","toolName":"bash"}`),
+			ID:        "e2",
+			Timestamp: time.Date(2026, 1, 1, 0, 0, 1, 0, time.UTC),
+		},
+		// No tool.execution_complete — tool is awaiting approval
+	}
+
+	messages := EventsToMessages(events)
+
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(messages))
+	}
+	if len(messages[0].ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(messages[0].ToolCalls))
+	}
+
+	tc := messages[0].ToolCalls[0]
+	if tc.Status != ToolCallRunning {
+		t.Errorf("tool call status = %q, want running (awaiting approval)", tc.Status)
+	}
+	if tc.Command != "echo hello" {
+		t.Errorf("tool call command = %q, want 'echo hello'", tc.Command)
+	}
+	if tc.Name != "bash" {
+		t.Errorf("tool call name = %q, want bash", tc.Name)
+	}
 }

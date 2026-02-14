@@ -208,7 +208,9 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 	case domain.ToolCallFailed:
 		icon = "✗"
 	case domain.ToolCallRunning:
-		icon = "⟳"
+		icon = "⟳ awaiting approval"
+	case domain.ToolCallPending:
+		icon = "⏳ pending"
 	default:
 		icon = "…"
 	}
@@ -221,7 +223,26 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 
 	header := toolCallStyle.Render(fmt.Sprintf("  %s 🔧 %s %s", chevron, tc.Name, icon))
 
-	if tc.Summary == "" || collapsed {
+	// For pending/running tools, always show the command if available
+	isPending := tc.Status == domain.ToolCallPending || tc.Status == domain.ToolCallRunning
+	if isPending && tc.Command != "" {
+		cmdStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("251")).
+			Background(lipgloss.Color("237")).
+			Padding(0, 1)
+		cmdBlock := cmdStyle.Render("$ " + tc.Command)
+		waitingHint := lipgloss.NewStyle().
+			Foreground(theme.Warning).
+			Bold(true).
+			Render("    ⚡ Waiting for approval in terminal")
+		return header + "\n" + "    " + cmdBlock + "\n" + waitingHint
+	}
+
+	if collapsed {
+		return header
+	}
+
+	if tc.Summary == "" {
 		return header
 	}
 

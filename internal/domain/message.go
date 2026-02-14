@@ -28,6 +28,7 @@ type ToolCall struct {
 	Name    string
 	Status  ToolCallStatus
 	Summary string
+	Command string // for bash tools, the command being run/requested
 }
 
 // ToolCallStatus tracks the state of a tool invocation.
@@ -44,7 +45,10 @@ const (
 // It merges related events (e.g., tool starts/completes) into coherent messages.
 func EventsToMessages(events []Event) []Message {
 	var messages []Message
-	toolStatus := make(map[string]*ToolCall) // toolCallId → status
+	// Track tool calls by pointer so status updates propagate to messages
+	toolStatus := make(map[string]*ToolCall)    // toolCallId → ToolCall ptr
+	toolMsgIdx := make(map[string]int)          // toolCallId → message index
+	toolCallIdx := make(map[string]int)         // toolCallId → index within message's ToolCalls
 
 	for _, evt := range events {
 		switch evt.Type {
@@ -70,8 +74,21 @@ func EventsToMessages(events []Event) []Message {
 					Name:   tr.Name,
 					Status: ToolCallPending,
 				}
-				toolStatus[tr.ToolCallID] = &tc
+				// Extract command for bash tools
+				if tr.Name == "bash" {
+					var args struct {
+						Command string `json:"command"`
+					}
+					if err := parseJSON(tr.Arguments, &args); err == nil {
+						tc.Command = args.Command
+					}
+				}
 				toolCalls = append(toolCalls, tc)
+				msgIdx := len(messages) // will be this message's index
+				tcIdx := len(toolCalls) - 1
+				toolStatus[tr.ToolCallID] = &toolCalls[tcIdx]
+				toolMsgIdx[tr.ToolCallID] = msgIdx
+				toolCallIdx[tr.ToolCallID] = tcIdx
 			}
 			// Only add if there's content or tool calls
 			if d.Content != "" || len(toolCalls) > 0 {
@@ -81,6 +98,21 @@ func EventsToMessages(events []Event) []Message {
 					Timestamp: evt.Timestamp,
 					ToolCalls: toolCalls,
 				})
+				// Re-point toolStatus to the actual slice elements in messages
+				for _, tr := range d.ToolRequests {
+					mi := toolMsgIdx[tr.ToolCallID]
+					ci := toolCallIdx[tr.ToolCallID]
+					toolStatus[tr.ToolCallID] = &messages[mi].ToolCalls[ci]
+				}
+			}
+
+		case EventToolExecutionStart:
+			d, err := evt.ParseToolExecution()
+			if err != nil {
+				continue
+			}
+			if tc, ok := toolStatus[d.ToolCallID]; ok {
+				tc.Status = ToolCallRunning
 			}
 
 		case EventToolExecutionComplete:
