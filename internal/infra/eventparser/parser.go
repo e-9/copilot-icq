@@ -31,6 +31,9 @@ func (p *Parser) ReadAll() ([]domain.Event, error) {
 func (p *Parser) ReadNew() ([]domain.Event, error) {
 	f, err := os.Open(p.path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // file doesn't exist yet — empty conversation
+		}
 		return nil, fmt.Errorf("opening events file: %w", err)
 	}
 	defer f.Close()
