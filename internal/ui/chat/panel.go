@@ -242,11 +242,13 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 			Background(lipgloss.Color("237")).
 			Padding(0, 1)
 		cmdBlock := cmdStyle.Render("$ " + tc.Command)
+		approvalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("251")).Background(lipgloss.Color("237")).Padding(0, 1)
+		approvalLine := "    " + approvalStyle.Render("❯ Allow   Deny   Always allow   Don't allow")
 		waitingHint := lipgloss.NewStyle().
 			Foreground(theme.Warning).
 			Bold(true).
-			Render("    ⚡ Waiting for approval in terminal")
-		return header + "\n" + "    " + cmdBlock + "\n" + waitingHint
+			Render("    ⚡ Respond in terminal")
+		return header + "\n" + "    " + cmdBlock + "\n" + approvalLine + "\n" + waitingHint
 	}
 
 	// For ask_user tools, show question and choices
@@ -306,10 +308,12 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 			}
 		}
 		if isPending {
+			approvalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("251")).Background(lipgloss.Color("237")).Padding(0, 1)
+			detail.WriteString("    " + approvalStyle.Render("❯ Allow   Deny   Always allow   Don't allow") + "\n")
 			waitingHint := lipgloss.NewStyle().
 				Foreground(theme.Warning).
 				Bold(true).
-				Render("    ⚡ Waiting for approval in terminal")
+				Render("    ⚡ Respond in terminal")
 			return header + "\n" + detail.String() + waitingHint
 		}
 		return header + "\n" + detail.String()
