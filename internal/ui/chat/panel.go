@@ -227,6 +227,9 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 	}
 
 	header := toolCallStyle.Render(fmt.Sprintf("  %s 🔧 %s %s", chevron, tc.Name, icon))
+	if tc.Name == "ask_user" {
+		header = toolCallStyle.Render(fmt.Sprintf("  %s ❓ %s %s", chevron, tc.Name, icon))
+	}
 
 	// For pending/running tools, always show the command if available
 	isPending := tc.Status == domain.ToolCallPending || tc.Status == domain.ToolCallRunning
@@ -241,6 +244,34 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 			Bold(true).
 			Render("    ⚡ Waiting for approval in terminal")
 		return header + "\n" + "    " + cmdBlock + "\n" + waitingHint
+	}
+
+	// For ask_user tools, show question and choices
+	if tc.Question != "" {
+		qStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Bold(true)
+		choiceStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("251")).
+			Background(lipgloss.Color("237")).
+			Padding(0, 1)
+		var detail strings.Builder
+		detail.WriteString("    " + qStyle.Render(tc.Question) + "\n")
+		if len(tc.Choices) > 0 {
+			for i, c := range tc.Choices {
+				detail.WriteString(fmt.Sprintf("    %s\n", choiceStyle.Render(fmt.Sprintf("[%d] %s", i+1, c))))
+			}
+		}
+		if isPending {
+			waitingHint := lipgloss.NewStyle().
+				Foreground(theme.Warning).
+				Bold(true).
+				Render("    ⚡ Respond in terminal")
+			return header + "\n" + detail.String() + waitingHint
+		}
+		if tc.Summary != "" {
+			responseStyle := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
+			detail.WriteString("    " + responseStyle.Render("→ "+tc.Summary) + "\n")
+		}
+		return header + "\n" + detail.String()
 	}
 
 	if collapsed {
