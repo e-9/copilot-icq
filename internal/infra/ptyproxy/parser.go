@@ -96,16 +96,27 @@ func (p *Parser) Feed(raw []byte) OutputChunk {
 	cleaned := StripANSI(raw)
 	p.buffer.WriteString(cleaned)
 
+	// Cap buffer size to prevent regex performance issues
+	if p.buffer.Len() > 2048 {
+		content := p.buffer.String()
+		keep := content[len(content)-1024:]
+		p.buffer.Reset()
+		p.buffer.WriteString(keep)
+	}
+
 	chunk := OutputChunk{
 		Raw:     raw,
 		Cleaned: cleaned,
 	}
 
 	buffered := p.buffer.String()
-	if prompt := DetectApprovalPrompt(buffered); prompt != nil {
-		chunk.IsPrompt = true
-		chunk.Prompt = prompt
-		p.buffer.Reset()
+	// Quick-reject: only run regex if buffer might contain a prompt
+	if strings.Contains(buffered, "?") {
+		if prompt := DetectApprovalPrompt(buffered); prompt != nil {
+			chunk.IsPrompt = true
+			chunk.Prompt = prompt
+			p.buffer.Reset()
+		}
 	}
 
 	return chunk

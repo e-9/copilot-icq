@@ -265,14 +265,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected != nil && m.selected.ID == msg.SessionID {
 			m.chat.SetMessages(msg.Messages)
 		}
+		// If a reload was requested while we were loading, do it now
+		if m.pendingReload && m.selected != nil {
+			m.pendingReload = false
+			m.loadingEvents = true
+			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+		}
 
 	case FileChangedMsg:
 		m.lastSeen[msg.SessionID] = time.Now()
 		m.sidebar.SetLastSeen(m.lastSeen)
-		if m.selected != nil && m.selected.ID == msg.SessionID && !m.loadingEvents {
-			m.loadingEvents = true
-			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
-		} else if m.selected == nil || m.selected.ID != msg.SessionID {
+		if m.selected != nil && m.selected.ID == msg.SessionID {
+			if !m.loadingEvents {
+				m.loadingEvents = true
+				cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+			} else {
+				m.pendingReload = true // will reload when current one finishes
+			}
+		} else {
 			m.unread[msg.SessionID]++
 			m.sidebar.SetUnread(m.unread)
 		}
@@ -322,7 +332,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PTYOutputMsg:
 		if m.selected != nil && m.selected.ID == msg.SessionID {
 			m.streamBuffer += msg.Chunk.Cleaned
-			// No explicit reload needed — fsnotify watcher handles events.jsonl updates
+			// Cap streamBuffer to prevent unbounded growth
+			const maxStreamBuf = 8192
+			if len(m.streamBuffer) > maxStreamBuf {
+				m.streamBuffer = m.streamBuffer[len(m.streamBuffer)-maxStreamBuf:]
+			}
+			m.chat.SetStreamingText(m.streamBuffer)
+			// Rate-limited event reload: at most once per 500ms during PTY streaming
+			if !m.loadingEvents && time.Since(m.lastEventLoad) > 500*time.Millisecond {
+				m.loadingEvents = true
+				m.lastEventLoad = time.Now()
+				cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+			}
 		}
 		if m.activePTY != nil && m.ptySessionID == msg.SessionID {
 			cmds = append(cmds, streamPTY(m.activePTY, m.ptySessionID))
@@ -342,6 +363,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingApproval = nil
 		m.streamBuffer = ""
 		m.ptySessionID = ""
+		m.chat.SetStreamingText("")
 		// Reload events to get the final state
 		if m.selected != nil {
 			m.loadingEvents = true

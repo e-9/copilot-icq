@@ -14,14 +14,15 @@ import (
 
 // Model represents the chat panel showing conversation history.
 type Model struct {
-	viewport    viewport.Model
-	messages    []domain.Message
-	width       int
-	height      int
-	ready       bool
-	mdRender    *glamour.TermRenderer
-	collapsed   map[int]bool   // tool call indices collapsed state
-	renderCache map[int]string // message index → pre-rendered string
+	viewport      viewport.Model
+	messages      []domain.Message
+	width         int
+	height        int
+	ready         bool
+	mdRender      *glamour.TermRenderer
+	collapsed     map[int]bool   // tool call indices collapsed state
+	renderCache   map[int]string // message index → pre-rendered string
+	streamingText string         // live PTY streaming output (shown at bottom)
 }
 
 // New creates a new chat panel.
@@ -75,7 +76,27 @@ func (m *Model) SetMessages(msgs []domain.Message) {
 			delete(m.renderCache, k)
 		}
 	}
-	m.viewport.SetContent(m.renderMessages())
+	m.refreshContent()
+}
+
+// SetStreamingText sets live PTY output shown at the bottom of the chat.
+func (m *Model) SetStreamingText(text string) {
+	m.streamingText = text
+	m.refreshContent()
+}
+
+func (m *Model) refreshContent() {
+	content := m.renderMessages()
+	if m.streamingText != "" {
+		lines := strings.Split(strings.TrimSpace(m.streamingText), "\n")
+		if len(lines) > 8 {
+			lines = lines[len(lines)-8:]
+		}
+		tail := strings.Join(lines, "\n")
+		streamStyle := lipgloss.NewStyle().Foreground(theme.Accent)
+		content += "\n" + streamStyle.Render("⟳ "+tail)
+	}
+	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()
 }
 
@@ -87,8 +108,7 @@ func (m Model) Messages() []domain.Message {
 // AppendMessages adds new messages and scrolls to bottom.
 func (m *Model) AppendMessages(msgs []domain.Message) {
 	m.messages = append(m.messages, msgs...)
-	m.viewport.SetContent(m.renderMessages())
-	m.viewport.GotoBottom()
+	m.refreshContent()
 }
 
 // ToggleAllToolCalls toggles collapse state for all tool calls.
@@ -116,6 +136,7 @@ func (m *Model) ToggleAllToolCalls() {
 	}
 
 	m.viewport.SetContent(m.renderMessages())
+	m.viewport.GotoBottom()
 }
 
 // Update handles viewport messages (scrolling).

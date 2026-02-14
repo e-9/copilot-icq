@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -72,6 +73,7 @@ func tickEvery(d time.Duration) tea.Cmd {
 }
 
 // streamPTY reads the next chunk from a PTY session and returns it as a Msg.
+// It batches immediately-available chunks to reduce Bubble Tea update frequency.
 func streamPTY(session *ptyproxy.Session, sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		select {
@@ -82,9 +84,43 @@ func streamPTY(session *ptyproxy.Session, sessionID string) tea.Cmd {
 			if chunk.IsPrompt {
 				return PTYPromptMsg{SessionID: sessionID, Prompt: chunk.Prompt}
 			}
-			return PTYOutputMsg{SessionID: sessionID, Chunk: chunk}
+			// Batch: drain any immediately available non-prompt chunks
+			var buf strings.Builder
+			buf.WriteString(chunk.Cleaned)
+		drain:
+			for {
+				select {
+				case c, ok := <-session.Output():
+					if !ok {
+						break drain
+					}
+					if c.IsPrompt {
+						return PTYPromptMsg{SessionID: sessionID, Prompt: c.Prompt}
+					}
+					buf.WriteString(c.Cleaned)
+				default:
+					break drain
+				}
+			}
+			return PTYOutputMsg{
+				SessionID: sessionID,
+				Chunk:     ptyproxy.OutputChunk{Cleaned: buf.String()},
+			}
 		case <-session.Done():
-			return PTYClosedMsg{SessionID: sessionID}
+			// Drain remaining buffered chunks before signaling close
+			for {
+				select {
+				case c, ok := <-session.Output():
+					if !ok {
+						return PTYClosedMsg{SessionID: sessionID}
+					}
+					if c.IsPrompt {
+						return PTYPromptMsg{SessionID: sessionID, Prompt: c.Prompt}
+					}
+				default:
+					return PTYClosedMsg{SessionID: sessionID}
+				}
+			}
 		}
 	}
 }

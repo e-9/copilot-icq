@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"time"
 
 	"github.com/creack/pty"
 )
@@ -81,8 +82,13 @@ func (s *Session) readLoop() {
 	defer close(s.output)
 
 	buf := make([]byte, 4096)
+	consecutiveEmpty := 0
 	for {
 		n, err := s.ptmx.Read(buf)
+		if n == 0 && err == nil {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
 		if n > 0 {
 			raw := make([]byte, n)
 			copy(raw, buf[:n])
@@ -90,6 +96,12 @@ func (s *Session) readLoop() {
 			// Only send chunks with meaningful content or detected prompts
 			if chunk.Cleaned != "" || chunk.IsPrompt {
 				s.output <- chunk
+				consecutiveEmpty = 0
+			} else {
+				consecutiveEmpty++
+				if consecutiveEmpty > 10 {
+					time.Sleep(10 * time.Millisecond)
+				}
 			}
 		}
 		if err != nil {

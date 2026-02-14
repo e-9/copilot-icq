@@ -53,8 +53,10 @@ type Model struct {
 	ptySessionID    string                    // session ID of the active PTY
 	streamBuffer    string                    // accumulated streaming text
 	copilotBin      string                    // path to copilot binary for PTY mode
+	lastEventLoad   time.Time                 // last event reload timestamp for rate-limiting
 
-	loadingEvents bool // guards against concurrent event reloads
+	loadingEvents    bool // guards against concurrent event reloads
+	pendingReload    bool // a reload was requested while one was in-flight
 }
 
 // NewModel creates the initial application model.
