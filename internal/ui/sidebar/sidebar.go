@@ -156,7 +156,23 @@ func (m Model) IsFiltering() bool {
 // Use this when the user has completed a filter+select action.
 func (m *Model) ClearFilterAndSetItems(sessions []domain.Session) {
 	m.List.ResetFilter()
-	m.setItemsInternal(sessions)
+
+	sorted := m.sortSessions(sessions)
+	items := make([]list.Item, len(sorted))
+	for i, s := range sorted {
+		items[i] = Item{Session: s}
+	}
+	m.List.SetItems(items)
+
+	// Select the active session (sorted to index 0)
+	if m.activeID != "" {
+		for i, s := range sorted {
+			if s.ID == m.activeID {
+				m.List.Select(i)
+				break
+			}
+		}
+	}
 }
 
 // Update handles messages for the sidebar list.
