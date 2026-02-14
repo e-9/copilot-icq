@@ -160,6 +160,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sidebar.SetUnread(m.unread)
 					m.sidebar.ClearFilterAndSetItems(m.sessions) // clear filter + re-sort
 					m.watcher.WatchSession(s.ID)
+					m.loadingEvents = true
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
 				}
 			} else if m.focus == FocusInput {
@@ -256,6 +257,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case EventsLoadedMsg:
+		m.loadingEvents = false
 		if msg.Err != nil {
 			m.err = msg.Err
 			return m, nil
@@ -267,9 +269,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case FileChangedMsg:
 		m.lastSeen[msg.SessionID] = time.Now()
 		m.sidebar.SetLastSeen(m.lastSeen)
-		if m.selected != nil && m.selected.ID == msg.SessionID {
+		if m.selected != nil && m.selected.ID == msg.SessionID && !m.loadingEvents {
+			m.loadingEvents = true
 			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
-		} else {
+		} else if m.selected == nil || m.selected.ID != msg.SessionID {
 			m.unread[msg.SessionID]++
 			m.sidebar.SetUnread(m.unread)
 		}
@@ -301,7 +304,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selected == nil || m.selected.ID != msg.SessionID {
 				m.unread[msg.SessionID]++
 				m.sidebar.SetUnread(m.unread)
-			} else {
+			} else if !m.loadingEvents {
+				m.loadingEvents = true
 				cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
 			}
 			m.sidebar.SetItems(m.sessions)
@@ -340,6 +344,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ptySessionID = ""
 		// Reload events to get the final state
 		if m.selected != nil {
+			m.loadingEvents = true
 			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
 		}
 

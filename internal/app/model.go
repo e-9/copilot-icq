@@ -53,6 +53,8 @@ type Model struct {
 	ptySessionID    string                    // session ID of the active PTY
 	streamBuffer    string                    // accumulated streaming text
 	copilotBin      string                    // path to copilot binary for PTY mode
+
+	loadingEvents bool // guards against concurrent event reloads
 }
 
 // NewModel creates the initial application model.

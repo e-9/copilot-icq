@@ -14,13 +14,14 @@ import (
 
 // Model represents the chat panel showing conversation history.
 type Model struct {
-	viewport  viewport.Model
-	messages  []domain.Message
-	width     int
-	height    int
-	ready     bool
-	mdRender  *glamour.TermRenderer
-	collapsed map[int]bool // tool call indices collapsed state
+	viewport    viewport.Model
+	messages    []domain.Message
+	width       int
+	height      int
+	ready       bool
+	mdRender    *glamour.TermRenderer
+	collapsed   map[int]bool   // tool call indices collapsed state
+	renderCache map[int]string // message index → pre-rendered string
 }
 
 // New creates a new chat panel.
@@ -34,12 +35,13 @@ func New(width, height int) Model {
 	)
 
 	return Model{
-		viewport:  vp,
-		width:     width,
-		height:    height,
-		ready:     true,
-		mdRender:  r,
-		collapsed: make(map[int]bool),
+		viewport:    vp,
+		width:       width,
+		height:      height,
+		ready:       true,
+		mdRender:    r,
+		collapsed:   make(map[int]bool),
+		renderCache: make(map[int]string),
 	}
 }
 
@@ -53,12 +55,26 @@ func (m *Model) SetSize(w, h int) {
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(w-4),
 	)
+	m.renderCache = make(map[int]string) // invalidate on resize
 }
 
 // SetMessages replaces the displayed messages and re-renders.
 func (m *Model) SetMessages(msgs []domain.Message) {
 	m.messages = msgs
-	m.collapsed = make(map[int]bool) // reset collapsed state
+	m.collapsed = make(map[int]bool)
+	// Keep cache for unchanged messages; invalidate last 3 (may have status changes)
+	cutoff := len(msgs) - 3
+	for k := range m.renderCache {
+		if k >= cutoff {
+			delete(m.renderCache, k)
+		}
+	}
+	// Remove cache entries beyond current message count
+	for k := range m.renderCache {
+		if k >= len(msgs) {
+			delete(m.renderCache, k)
+		}
+	}
 	m.viewport.SetContent(m.renderMessages())
 	m.viewport.GotoBottom()
 }
@@ -123,8 +139,16 @@ func (m Model) renderMessages() string {
 
 	var sb strings.Builder
 	toolIdx := 0
-	for _, msg := range m.messages {
-		sb.WriteString(m.renderMessage(msg, m.width-2, &toolIdx))
+	for i, msg := range m.messages {
+		if cached, ok := m.renderCache[i]; ok {
+			sb.WriteString(cached)
+			// Advance toolIdx past this message's tool calls
+			toolIdx += len(msg.ToolCalls)
+		} else {
+			rendered := m.renderMessage(msg, m.width-2, &toolIdx)
+			m.renderCache[i] = rendered
+			sb.WriteString(rendered)
+		}
 		sb.WriteString("\n")
 	}
 	return sb.String()

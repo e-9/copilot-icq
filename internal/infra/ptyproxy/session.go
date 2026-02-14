@@ -87,7 +87,10 @@ func (s *Session) readLoop() {
 			raw := make([]byte, n)
 			copy(raw, buf[:n])
 			chunk := s.parser.Feed(raw)
-			s.output <- chunk
+			// Only send chunks with meaningful content or detected prompts
+			if chunk.Cleaned != "" || chunk.IsPrompt {
+				s.output <- chunk
+			}
 		}
 		if err != nil {
 			if err != io.EOF {
