@@ -27,6 +27,9 @@ func main() {
 		case "install-hooks":
 			runInstallHooks()
 			return
+		case "cleanup":
+			runCleanup()
+			return
 		}
 	}
 
@@ -221,4 +224,25 @@ func shortID(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+func runCleanup() {
+	fmt.Println("🟢 Copilot ICQ — Cleanup")
+	fmt.Println()
+
+	killed, err := config.CleanupOrphanShells()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  ❌ Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if killed == 0 {
+		fmt.Println("  ✅ No orphaned shells found — system is clean!")
+	} else {
+		fmt.Printf("  🧹 Killed %d orphaned bash shell(s) from copilot sessions\n", killed)
+		fmt.Println("  These were leftover tool execution processes consuming PTY devices.")
+	}
+
+	fmt.Println()
+	fmt.Println("  Tip: Run 'copilot-icq doctor' to check PTY health anytime.")
 }
