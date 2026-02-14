@@ -92,6 +92,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.Blur()
 			}
 			return m, nil
+		case "shift+tab":
+			switch m.focus {
+			case FocusSidebar:
+				if m.selected != nil && m.runner != nil {
+					m.focus = FocusInput
+					m.input.Focus()
+				} else {
+					m.focus = FocusChat
+					m.input.Blur()
+				}
+			case FocusChat:
+				m.focus = FocusSidebar
+				m.input.Blur()
+			case FocusInput:
+				m.focus = FocusChat
+				m.input.Blur()
+			}
+			return m, nil
 		case "enter":
 			if m.focus == FocusSidebar {
 				if s := m.sidebar.SelectedSession(); s != nil {

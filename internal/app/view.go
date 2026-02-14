@@ -170,7 +170,8 @@ func (m Model) renderHelpOverlay() string {
 	descStyle := lipgloss.NewStyle().Foreground(theme.Subtle)
 
 	bindings := []struct{ key, desc string }{
-		{"Tab / Click", "Switch between panels (sidebar → chat → input)"},
+		{"Tab", "Switch panel forward (sidebar → chat → input)"},
+		{"Shift+Tab", "Switch panel backward (input → chat → sidebar)"},
 		{"Enter", "Open session (sidebar) / Send message (input)"},
 		{"Esc", "Go back (input → chat, cancel rename)"},
 		{"↑ ↓", "Navigate sessions / scroll chat"},
