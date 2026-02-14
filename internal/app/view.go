@@ -62,7 +62,9 @@ func (m Model) View() string {
 	}
 
 	securityIcon := ""
-	if m.runner != nil {
+	if m.cfg != nil && m.cfg.SecurityMode == "interactive" {
+		securityIcon = lipgloss.NewStyle().Foreground(theme.Accent).Render("  🔌 interactive")
+	} else if m.runner != nil {
 		if m.runner.Mode() == runner.ModeScoped {
 			securityIcon = lipgloss.NewStyle().Foreground(theme.Highlight).Render("  🔒 scoped")
 		} else {

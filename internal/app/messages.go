@@ -73,3 +73,9 @@ type ApprovalSelectedMsg struct {
 	SessionID string
 	Shortcut  string // the number key to send (e.g., "1", "2", "3")
 }
+
+// ptyStartedMsg is sent when a PTY session has been successfully spawned.
+type ptyStartedMsg struct {
+	SessionID string
+	Session   *ptyproxy.Session
+}

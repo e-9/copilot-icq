@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/notifier"
+	"github.com/e-9/copilot-icq/internal/infra/ptyproxy"
 	"github.com/e-9/copilot-icq/internal/ui/theme"
 	"gopkg.in/yaml.v3"
 )
@@ -60,9 +61,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+c":
+			if m.activePTY != nil {
+				m.activePTY.Close()
+			}
 			return m, tea.Quit
 		case "q":
 			if m.focus != FocusInput {
+				if m.activePTY != nil {
+					m.activePTY.Close()
+				}
 				return m, tea.Quit
 			}
 		case "esc":
@@ -170,9 +177,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.input.Blur()
 				} else {
 					text := m.input.Value()
-					if text != "" && m.selected != nil && m.runner != nil && !m.input.IsSending() {
+					if text != "" && m.selected != nil && !m.input.IsSending() {
 						m.input.SetSending(true)
-						cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
+						// Use PTY mode if configured, otherwise fire-and-forget
+						if m.copilotBin != "" && m.cfg != nil && m.cfg.SecurityMode == "interactive" {
+							cmds = append(cmds, m.spawnPTYSession(m.selected.ID, text))
+						} else if m.runner != nil {
+							cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
+						}
 					}
 				}
 			}
@@ -335,6 +347,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ApprovalSelectedMsg:
 		m.pendingApproval = nil
 		m.approvalCursor = 0
+
+	case ptyStartedMsg:
+		m.activePTY = msg.Session
+		m.ptySessionID = msg.SessionID
+		m.input.SetSending(false)
+		m.input.Reset()
+		// Start streaming PTY output
+		cmds = append(cmds, streamPTY(m.activePTY, m.ptySessionID))
 	}
 
 	// Route input to focused panel
@@ -354,6 +374,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// spawnPTYSession launches an interactive copilot session in PTY mode.
+func (m *Model) spawnPTYSession(sessionID, message string) tea.Cmd {
+	return func() tea.Msg {
+		session, err := ptyproxy.Spawn(m.copilotBin, sessionID, message)
+		if err != nil {
+			return MessageSentMsg{
+				SessionID: sessionID,
+				Err:       fmt.Errorf("PTY spawn failed: %w", err),
+			}
+		}
+		// Store the PTY session — we'll pick it up in the next Update cycle
+		return ptyStartedMsg{SessionID: sessionID, Session: session}
+	}
 }
 
 // renameSession updates the summary field in workspace.yaml.
