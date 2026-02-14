@@ -85,16 +85,47 @@ func (m *Model) SetStreamingText(text string) {
 	m.refreshContent()
 }
 
+// sanitizeStreamText removes control characters that corrupt TUI layout.
+func sanitizeStreamText(s string) string {
+	var sb strings.Builder
+	for _, r := range s {
+		if r == '\n' || r == '\t' || (r >= 32 && r != 127) {
+			sb.WriteRune(r)
+		}
+	}
+	return sb.String()
+}
+
 func (m *Model) refreshContent() {
 	content := m.renderMessages()
 	if m.streamingText != "" {
-		lines := strings.Split(strings.TrimSpace(m.streamingText), "\n")
-		if len(lines) > 8 {
-			lines = lines[len(lines)-8:]
+		cleaned := sanitizeStreamText(m.streamingText)
+		lines := strings.Split(strings.TrimSpace(cleaned), "\n")
+		// Filter out empty/whitespace-only lines
+		var nonEmpty []string
+		for _, l := range lines {
+			if strings.TrimSpace(l) != "" {
+				nonEmpty = append(nonEmpty, l)
+			}
 		}
-		tail := strings.Join(lines, "\n")
-		streamStyle := lipgloss.NewStyle().Foreground(theme.Accent)
-		content += "\n" + streamStyle.Render("⟳ "+tail)
+		if len(nonEmpty) > 6 {
+			nonEmpty = nonEmpty[len(nonEmpty)-6:]
+		}
+		if len(nonEmpty) > 0 {
+			// Truncate long lines to prevent horizontal overflow
+			maxW := m.width - 8
+			if maxW < 20 {
+				maxW = 20
+			}
+			for i, l := range nonEmpty {
+				if len(l) > maxW {
+					nonEmpty[i] = l[:maxW] + "…"
+				}
+			}
+			tail := strings.Join(nonEmpty, "\n")
+			streamStyle := lipgloss.NewStyle().Foreground(theme.Accent)
+			content += "\n" + streamStyle.Render("⟳ "+tail)
+		}
 	}
 	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()

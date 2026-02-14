@@ -32,7 +32,7 @@ type OutputChunk struct {
 
 // Copilot CLI approval prompt patterns
 var (
-	promptQuestionRe = regexp.MustCompile(`(?i)(do you want to|allow|approve|confirm|proceed)\b.*\?`)
+	promptQuestionRe = regexp.MustCompile(`(?im)((?:do you want|allow|approve|confirm|proceed|permission|accept|execute|apply|run this)\b.*)$`)
 	numberedOptionRe = regexp.MustCompile(`(?m)^\s*[❯►>]?\s*(\d+)\.\s+(.+)$`)
 )
 
@@ -110,13 +110,10 @@ func (p *Parser) Feed(raw []byte) OutputChunk {
 	}
 
 	buffered := p.buffer.String()
-	// Quick-reject: only run regex if buffer might contain a prompt
-	if strings.Contains(buffered, "?") {
-		if prompt := DetectApprovalPrompt(buffered); prompt != nil {
-			chunk.IsPrompt = true
-			chunk.Prompt = prompt
-			p.buffer.Reset()
-		}
+	if prompt := DetectApprovalPrompt(buffered); prompt != nil {
+		chunk.IsPrompt = true
+		chunk.Prompt = prompt
+		p.buffer.Reset()
 	}
 
 	return chunk
