@@ -25,10 +25,12 @@ type Message struct {
 
 // ToolCall represents a tool invocation shown in the chat.
 type ToolCall struct {
-	Name    string
-	Status  ToolCallStatus
-	Summary string
-	Command string // for bash tools, the command being run/requested
+	Name     string
+	Status   ToolCallStatus
+	Summary  string
+	Command  string   // for bash tools, the command being run/requested
+	Question string   // for ask_user tools, the question text
+	Choices  []string // for ask_user tools, the selectable options
 }
 
 // ToolCallStatus tracks the state of a tool invocation.
@@ -81,6 +83,17 @@ func EventsToMessages(events []Event) []Message {
 					}
 					if err := parseJSON(tr.Arguments, &args); err == nil {
 						tc.Command = args.Command
+					}
+				}
+				// Extract question/choices for ask_user tools
+				if tr.Name == "ask_user" {
+					var args struct {
+						Question string   `json:"question"`
+						Choices  []string `json:"choices"`
+					}
+					if err := parseJSON(tr.Arguments, &args); err == nil {
+						tc.Question = args.Question
+						tc.Choices = args.Choices
 					}
 				}
 				toolCalls = append(toolCalls, tc)
