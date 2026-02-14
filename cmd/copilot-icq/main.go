@@ -36,6 +36,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load user config
+	configPath := ""
+	for i, arg := range os.Args {
+		if arg == "--config" && i+1 < len(os.Args) {
+			configPath = os.Args[i+1]
+		}
+	}
+	appCfg := config.LoadAppConfig(configPath)
+
 	repo := sessionrepo.New(cfg.SessionStatePath)
 
 	w, err := watcher.New(cfg.SessionStatePath)
@@ -47,9 +56,13 @@ func main() {
 	go w.Start()
 
 	// Create runner for sending messages (nil if copilot not found)
+	mode := runner.ModeScoped
+	if appCfg.SecurityMode == "full-auto" {
+		mode = runner.ModeFullAuto
+	}
 	var r *runner.Runner
 	if cfg.CopilotBinPath != "" {
-		r = runner.New(cfg.CopilotBinPath, runner.ModeScoped)
+		r = runner.New(cfg.CopilotBinPath, mode)
 	}
 
 	// Start hook server
@@ -62,7 +75,7 @@ func main() {
 		go hookSrv.Start()
 	}
 
-	model := app.NewModel(repo, w, r)
+	model := app.NewModel(repo, w, r, appCfg)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 

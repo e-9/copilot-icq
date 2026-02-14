@@ -4,6 +4,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/e-9/copilot-icq/internal/config"
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/runner"
 	"github.com/e-9/copilot-icq/internal/infra/sessionrepo"
@@ -40,10 +41,13 @@ type Model struct {
 	unread   map[string]int // sessionID → unread count
 	lastSeen map[string]time.Time // sessionID → last update time
 	err      error
+	showHelp bool   // keyboard shortcuts overlay
+	renaming bool   // inline session rename mode
+	cfg      *config.AppConfig // user configuration
 }
 
 // NewModel creates the initial application model.
-func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner) Model {
+func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg *config.AppConfig) Model {
 	return Model{
 		repo:     repo,
 		watcher:  w,
@@ -53,6 +57,7 @@ func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner) Mode
 		input:    input.New(80),
 		unread:   make(map[string]int),
 		lastSeen: make(map[string]time.Time),
+		cfg:      cfg,
 	}
 }
 

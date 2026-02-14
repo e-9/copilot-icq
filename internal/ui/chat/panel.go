@@ -63,6 +63,11 @@ func (m *Model) SetMessages(msgs []domain.Message) {
 	m.viewport.GotoBottom()
 }
 
+// Messages returns the current messages for export.
+func (m Model) Messages() []domain.Message {
+	return m.messages
+}
+
 // AppendMessages adds new messages and scrolls to bottom.
 func (m *Model) AppendMessages(msgs []domain.Message) {
 	m.messages = append(m.messages, msgs...)

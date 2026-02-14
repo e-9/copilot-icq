@@ -1,11 +1,17 @@
 package app
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/notifier"
 	"github.com/e-9/copilot-icq/internal/ui/theme"
+	"gopkg.in/yaml.v3"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -13,6 +19,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Help overlay: any key dismisses
+		if m.showHelp {
+			m.showHelp = false
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
@@ -21,9 +33,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "esc":
+			if m.renaming {
+				m.renaming = false
+				m.input.Reset()
+				m.input.ClearRenaming()
+				m.focus = FocusSidebar
+				m.input.Blur()
+				return m, nil
+			}
 			if m.focus == FocusInput {
 				m.focus = FocusChat
 				m.input.Blur()
+				return m, nil
+			}
+		case "?":
+			if m.focus != FocusInput {
+				m.showHelp = !m.showHelp
+				return m, nil
+			}
+		case "e":
+			if m.focus != FocusInput && m.selected != nil {
+				return m, m.exportConversation()
+			}
+		case "R":
+			// Shift+R: rename session (sidebar only)
+			if m.focus == FocusSidebar {
+				if s := m.sidebar.SelectedSession(); s != nil {
+					m.renaming = true
+					m.focus = FocusInput
+					m.input.SetRenaming(s.DisplayName())
+				}
 				return m, nil
 			}
 		case "r":
@@ -66,10 +105,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
 				}
 			} else if m.focus == FocusInput {
-				text := m.input.Value()
-				if text != "" && m.selected != nil && m.runner != nil && !m.input.IsSending() {
-					m.input.SetSending(true)
-					cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
+				if m.renaming {
+					// Complete rename
+					newName := m.input.Value()
+					if newName != "" && m.sidebar.SelectedSession() != nil {
+						s := m.sidebar.SelectedSession()
+						cmds = append(cmds, m.renameSession(s.ID, newName))
+					}
+					m.renaming = false
+					m.input.Reset()
+					m.input.ClearRenaming()
+					m.focus = FocusSidebar
+					m.input.Blur()
+				} else {
+					text := m.input.Value()
+					if text != "" && m.selected != nil && m.runner != nil && !m.input.IsSending() {
+						m.input.SetSending(true)
+						cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
+					}
 				}
 			}
 		}
@@ -190,6 +243,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.sidebar.SetItems(m.sessions)
 		}
+
+	case SessionRenamedMsg:
+		if msg.Err == nil {
+			cmds = append(cmds, loadSessions(m.repo))
+		}
+
+	case ExportCompleteMsg:
+		// Nothing to do in the model; status bar could show a flash
 	}
 
 	// Route input to focused panel
@@ -209,4 +270,96 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// renameSession updates the summary field in workspace.yaml.
+func (m Model) renameSession(sessionID, newName string) tea.Cmd {
+	return func() tea.Msg {
+		wsPath := filepath.Join(m.repo.BasePath(), sessionID, "workspace.yaml")
+		data, err := os.ReadFile(wsPath)
+		if err != nil {
+			return SessionRenamedMsg{SessionID: sessionID, Err: err}
+		}
+
+		var ws map[string]interface{}
+		if err := yaml.Unmarshal(data, &ws); err != nil {
+			return SessionRenamedMsg{SessionID: sessionID, Err: err}
+		}
+
+		ws["summary"] = newName
+		out, err := yaml.Marshal(ws)
+		if err != nil {
+			return SessionRenamedMsg{SessionID: sessionID, Err: err}
+		}
+
+		if err := os.WriteFile(wsPath, out, 0600); err != nil {
+			return SessionRenamedMsg{SessionID: sessionID, Err: err}
+		}
+
+		return SessionRenamedMsg{SessionID: sessionID}
+	}
+}
+
+// exportConversation writes the current conversation to a markdown file.
+func (m Model) exportConversation() tea.Cmd {
+	return func() tea.Msg {
+		if m.selected == nil {
+			return ExportCompleteMsg{Err: fmt.Errorf("no session selected")}
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("# Copilot Session: %s\n\n", m.selected.DisplayName()))
+		sb.WriteString(fmt.Sprintf("- **Session ID**: `%s`\n", m.selected.ID))
+		sb.WriteString(fmt.Sprintf("- **CWD**: `%s`\n", m.selected.CWD))
+		sb.WriteString(fmt.Sprintf("- **Created**: %s\n", m.selected.CreatedAt.Format(time.RFC3339)))
+		sb.WriteString(fmt.Sprintf("- **Updated**: %s\n\n", m.selected.UpdatedAt.Format(time.RFC3339)))
+		sb.WriteString("---\n\n")
+
+		msgs := m.chat.Messages()
+		for _, msg := range msgs {
+			ts := msg.Timestamp.Format("15:04:05")
+			switch msg.Role {
+			case domain.RoleUser:
+				sb.WriteString(fmt.Sprintf("### 🧑 You (%s)\n\n%s\n\n", ts, msg.Content))
+			case domain.RoleAssistant:
+				sb.WriteString(fmt.Sprintf("### 🤖 Copilot (%s)\n\n", ts))
+				if msg.Content != "" {
+					sb.WriteString(msg.Content + "\n\n")
+				}
+				for _, tc := range msg.ToolCalls {
+					status := "⏳"
+					if tc.Status == domain.ToolCallComplete {
+						status = "✓"
+					} else if tc.Status == domain.ToolCallFailed {
+						status = "✗"
+					}
+					sb.WriteString(fmt.Sprintf("- 🔧 **%s** %s", tc.Name, status))
+					if tc.Summary != "" {
+						summary := tc.Summary
+						if len(summary) > 100 {
+							summary = summary[:97] + "..."
+						}
+						sb.WriteString(fmt.Sprintf(": `%s`", summary))
+					}
+					sb.WriteString("\n")
+				}
+				sb.WriteString("\n")
+			case domain.RoleSystem:
+				sb.WriteString(fmt.Sprintf("*ℹ %s* (%s)\n\n", msg.Content, ts))
+			}
+		}
+
+		exportDir := "."
+		if m.cfg != nil && m.cfg.ExportDir != "" {
+			exportDir = m.cfg.ExportDir
+		}
+
+		filename := fmt.Sprintf("copilot-session-%s.md", m.selected.ShortID())
+		outPath := filepath.Join(exportDir, filename)
+		if err := os.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
+			return ExportCompleteMsg{Err: err}
+		}
+
+		return ExportCompleteMsg{Path: outPath}
+	}
 }

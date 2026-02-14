@@ -67,6 +67,19 @@ func (m *Model) SetSending(sending bool) {
 	}
 }
 
+// SetRenaming puts the input into rename mode with prefilled text.
+func (m *Model) SetRenaming(currentName string) {
+	m.textInput.Placeholder = "Enter new session name..."
+	m.textInput.SetValue(currentName)
+	m.textInput.CursorEnd()
+	m.Focus()
+}
+
+// ClearRenaming restores the input to normal message mode.
+func (m *Model) ClearRenaming() {
+	m.textInput.Placeholder = "Type a message... (Enter to send)"
+}
+
 // IsSending returns whether a message is being sent.
 func (m Model) IsSending() bool {
 	return m.sending

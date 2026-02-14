@@ -22,7 +22,7 @@ func TestViewFitsTerminalHeight(t *testing.T) {
 	defer w.Close()
 	r := runner.New("copilot", runner.ModeScoped)
 
-	m := NewModel(repo, w, r)
+	m := NewModel(repo, w, r, nil)
 
 	sizes := []struct {
 		w, h int
@@ -66,7 +66,7 @@ func TestViewFitsWithManySessions(t *testing.T) {
 	defer w.Close()
 	r := runner.New("copilot", runner.ModeScoped)
 
-	m := NewModel(repo, w, r)
+	m := NewModel(repo, w, r, nil)
 
 	// Small terminal — 10 sessions * 2 lines each = 20 lines, way more than 24-row terminal
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -99,7 +99,7 @@ func TestViewFitsWithSessions(t *testing.T) {
 	defer w.Close()
 	r := runner.New("copilot", runner.ModeScoped)
 
-	m := NewModel(repo, w, r)
+	m := NewModel(repo, w, r, nil)
 
 	model, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = model.(Model)

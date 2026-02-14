@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/e-9/copilot-icq/internal/infra/runner"
@@ -25,6 +26,11 @@ func (m Model) View() string {
 
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v\nPress q to quit.", m.err)
+	}
+
+	// Help overlay
+	if m.showHelp {
+		return m.renderHelpOverlay()
 	}
 
 	borderH := 2
@@ -61,7 +67,7 @@ func (m Model) View() string {
 
 	shortcuts := lipgloss.NewStyle().
 		Foreground(theme.Subtle).
-		Render("  Tab·Click switch  Enter open/send  t tools  Esc back  / filter  q quit")
+		Render("  ? help  e export  R rename  q quit")
 
 	headerLeft := title + sessionCount + securityIcon + sendingInfo
 	headerRight := shortcuts
@@ -146,9 +152,60 @@ func (m Model) View() string {
 		sessionInfo = fmt.Sprintf(" · 💬 %s (%s)", m.selected.DisplayName(), m.selected.ShortID())
 	}
 
+	modeLabel := ""
+	if m.renaming {
+		modeLabel = " · ✏️ renaming"
+	}
+
 	statusBar := theme.StatusBarStyle.
 		Width(m.width).
-		Render(fmt.Sprintf(" [%s]%s", focusLabel, sessionInfo))
+		Render(fmt.Sprintf(" [%s]%s%s", focusLabel, sessionInfo, modeLabel))
 
 	return lipgloss.JoinVertical(lipgloss.Left, headerBar, content, statusBar)
+}
+
+func (m Model) renderHelpOverlay() string {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Accent)
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("252"))
+	descStyle := lipgloss.NewStyle().Foreground(theme.Subtle)
+
+	bindings := []struct{ key, desc string }{
+		{"Tab / Click", "Switch between panels (sidebar → chat → input)"},
+		{"Enter", "Open session (sidebar) / Send message (input)"},
+		{"Esc", "Go back (input → chat, cancel rename)"},
+		{"↑ ↓", "Navigate sessions / scroll chat"},
+		{"/ (sidebar)", "Filter sessions by name"},
+		{"?", "Toggle this help overlay"},
+		{"t", "Toggle tool call details (expand/collapse)"},
+		{"r", "Refresh session list"},
+		{"R (Shift+R)", "Rename selected session"},
+		{"e", "Export conversation to markdown"},
+		{"q", "Quit (not active in input mode)"},
+		{"Ctrl+C", "Force quit"},
+	}
+
+	var sb strings.Builder
+	sb.WriteString(titleStyle.Render("🟢 Copilot ICQ — Keyboard Shortcuts"))
+	sb.WriteString("\n\n")
+
+	for _, b := range bindings {
+		sb.WriteString(fmt.Sprintf("  %s  %s\n",
+			keyStyle.Width(18).Render(b.key),
+			descStyle.Render(b.desc),
+		))
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(descStyle.Render("  Press any key to close this overlay"))
+
+	overlay := lipgloss.NewStyle().
+		Width(m.width - 4).
+		Padding(2, 4).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Accent).
+		Render(sb.String())
+
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		overlay)
 }

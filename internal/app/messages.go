@@ -36,3 +36,15 @@ type MessageSentMsg struct {
 
 // TickMsg is sent periodically to trigger session rescans.
 type TickMsg struct{}
+
+// SessionRenamedMsg is sent when a session has been renamed.
+type SessionRenamedMsg struct {
+	SessionID string
+	Err       error
+}
+
+// ExportCompleteMsg is sent when a conversation export finishes.
+type ExportCompleteMsg struct {
+	Path string
+	Err  error
+}
