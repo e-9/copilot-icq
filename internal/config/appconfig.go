@@ -9,7 +9,7 @@ import (
 
 // AppConfig holds user-configurable settings loaded from ~/.copilot-icq/config.yaml.
 type AppConfig struct {
-	SecurityMode  string   `yaml:"security_mode"`  // "scoped" (default), "full-auto", or "interactive"
+	SecurityMode  string   `yaml:"security_mode"`  // "scoped" (default) or "full-auto"
 	AllowedTools  []string `yaml:"allowed_tools"`   // tools allowed in scoped mode
 	ExportDir     string   `yaml:"export_dir"`      // directory for conversation exports
 	Notifications struct {

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/e-9/copilot-icq/internal/infra/runner"
 	"github.com/e-9/copilot-icq/internal/ui/theme"
 )
 
@@ -62,14 +61,13 @@ func (m Model) View() string {
 	}
 
 	securityIcon := ""
-	if m.cfg != nil && m.cfg.SecurityMode == "interactive" {
-		securityIcon = lipgloss.NewStyle().Foreground(theme.Accent).Render("  🔌 interactive")
-	} else if m.runner != nil {
-		if m.runner.Mode() == runner.ModeScoped {
-			securityIcon = lipgloss.NewStyle().Foreground(theme.Highlight).Render("  🔒 scoped")
-		} else {
-			securityIcon = lipgloss.NewStyle().Foreground(theme.Warning).Render("  ⚠️ full-auto")
-		}
+	if m.cfg != nil && m.cfg.SecurityMode == "full-auto" {
+		securityIcon = lipgloss.NewStyle().Foreground(theme.Warning).Render("  ⚠️ full-auto")
+	} else {
+		securityIcon = lipgloss.NewStyle().Foreground(theme.Highlight).Render("  🔒 scoped")
+	}
+	if m.activePTY != nil {
+		securityIcon += lipgloss.NewStyle().Foreground(theme.Accent).Render(" · 🔌 PTY")
 	}
 
 	shortcuts := lipgloss.NewStyle().

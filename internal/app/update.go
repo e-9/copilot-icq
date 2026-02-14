@@ -180,7 +180,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if text != "" && m.selected != nil && !m.input.IsSending() {
 						m.input.SetSending(true)
 						cwd := m.selected.CWD
-						if m.copilotBin != "" && m.cfg != nil && m.cfg.SecurityMode == "interactive" {
+						if m.copilotBin != "" {
 							cmds = append(cmds, m.spawnPTYSession(m.selected.ID, text, cwd))
 						} else if m.runner != nil {
 							cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text, cwd))
@@ -379,14 +379,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // spawnPTYSession launches an interactive copilot session in PTY mode.
 func (m *Model) spawnPTYSession(sessionID, message, cwd string) tea.Cmd {
 	return func() tea.Msg {
-		session, err := ptyproxy.Spawn(m.copilotBin, sessionID, message, cwd)
+		var extraArgs []string
+		if m.cfg != nil && m.cfg.SecurityMode == "full-auto" {
+			extraArgs = append(extraArgs, "--allow-all-tools")
+		} else {
+			for _, tool := range []string{"view", "glob", "grep", "bash"} {
+				extraArgs = append(extraArgs, "--allow-tool", tool)
+			}
+		}
+		session, err := ptyproxy.Spawn(m.copilotBin, sessionID, message, cwd, extraArgs...)
 		if err != nil {
 			return MessageSentMsg{
 				SessionID: sessionID,
 				Err:       fmt.Errorf("PTY spawn failed: %w", err),
 			}
 		}
-		// Store the PTY session — we'll pick it up in the next Update cycle
 		return ptyStartedMsg{SessionID: sessionID, Session: session}
 	}
 }
