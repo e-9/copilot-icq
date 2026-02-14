@@ -152,6 +152,13 @@ func (m Model) IsFiltering() bool {
 	return m.List.FilterState() == list.Filtering
 }
 
+// ClearFilterAndSetItems resets the filter then replaces items with sorting.
+// Use this when the user has completed a filter+select action.
+func (m *Model) ClearFilterAndSetItems(sessions []domain.Session) {
+	m.List.ResetFilter()
+	m.setItemsInternal(sessions)
+}
+
 // Update handles messages for the sidebar list.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -185,15 +192,21 @@ func (m *Model) SetActiveID(id string) {
 }
 
 // SetItems replaces the session list with smart sorting.
+// Skips update if user is actively filtering to avoid disrupting their input.
 func (m *Model) SetItems(sessions []domain.Session) {
+	// Don't replace items while user is actively filtering — it would clear their input
+	if m.List.FilterState() == list.Filtering || m.List.FilterState() == list.FilterApplied {
+		return
+	}
+	m.setItemsInternal(sessions)
+}
+
+func (m *Model) setItemsInternal(sessions []domain.Session) {
 	// Remember which session the cursor is on
 	var cursorID string
 	if sel := m.SelectedSession(); sel != nil {
 		cursorID = sel.ID
 	}
-
-	// Reset any active filter to prevent empty list after filter+select
-	m.List.ResetFilter()
 
 	sorted := m.sortSessions(sessions)
 
