@@ -230,6 +230,9 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 	if tc.Name == "ask_user" {
 		header = toolCallStyle.Render(fmt.Sprintf("  %s ❓ %s %s", chevron, tc.Name, icon))
 	}
+	if tc.Name == "edit" || tc.Name == "create" || tc.Name == "apply_patch" {
+		header = toolCallStyle.Render(fmt.Sprintf("  %s 📝 %s %s", chevron, tc.Name, icon))
+	}
 
 	// For pending/running tools, always show the command if available
 	isPending := tc.Status == domain.ToolCallPending || tc.Status == domain.ToolCallRunning
@@ -270,6 +273,44 @@ func (m Model) renderToolCall(tc domain.ToolCall, idx int) string {
 		if tc.Summary != "" {
 			responseStyle := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
 			detail.WriteString("    " + responseStyle.Render("→ "+tc.Summary) + "\n")
+		}
+		return header + "\n" + detail.String()
+	}
+
+	// For edit/create/apply_patch tools, show file path and diff
+	if tc.FilePath != "" {
+		pathStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Bold(true)
+		var detail strings.Builder
+		detail.WriteString("    " + pathStyle.Render(tc.FilePath) + "\n")
+		if !collapsed && tc.Patch != "" {
+			addStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("114"))
+			delStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("210"))
+			patchLines := strings.Split(tc.Patch, "\n")
+			maxLines := 12
+			shown := 0
+			for _, line := range patchLines {
+				if shown >= maxLines {
+					detail.WriteString("    " + lipgloss.NewStyle().Foreground(theme.Subtle).Render(fmt.Sprintf("... +%d more lines", len(patchLines)-shown)) + "\n")
+					break
+				}
+				if strings.HasPrefix(line, "+") {
+					detail.WriteString("    " + addStyle.Render(line) + "\n")
+				} else if strings.HasPrefix(line, "-") {
+					detail.WriteString("    " + delStyle.Render(line) + "\n")
+				} else if strings.HasPrefix(line, "***") || strings.HasPrefix(line, "@@") {
+					detail.WriteString("    " + lipgloss.NewStyle().Foreground(theme.Subtle).Render(line) + "\n")
+				} else if strings.TrimSpace(line) != "" {
+					detail.WriteString("    " + line + "\n")
+				}
+				shown++
+			}
+		}
+		if isPending {
+			waitingHint := lipgloss.NewStyle().
+				Foreground(theme.Warning).
+				Bold(true).
+				Render("    ⚡ Waiting for approval in terminal")
+			return header + "\n" + detail.String() + waitingHint
 		}
 		return header + "\n" + detail.String()
 	}
