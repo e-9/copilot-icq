@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/e-9/copilot-icq/internal/domain"
+	"github.com/e-9/copilot-icq/internal/infra/ptyproxy"
 	"github.com/e-9/copilot-icq/internal/infra/watcher"
 )
 
@@ -47,4 +48,28 @@ type SessionRenamedMsg struct {
 type ExportCompleteMsg struct {
 	Path string
 	Err  error
+}
+
+// PTYOutputMsg is sent when the PTY session produces output.
+type PTYOutputMsg struct {
+	SessionID string
+	Chunk     ptyproxy.OutputChunk
+}
+
+// PTYPromptMsg is sent when an approval prompt is detected in PTY output.
+type PTYPromptMsg struct {
+	SessionID string
+	Prompt    *ptyproxy.ApprovalPrompt
+}
+
+// PTYClosedMsg is sent when the PTY session process exits.
+type PTYClosedMsg struct {
+	SessionID string
+	Err       error
+}
+
+// ApprovalSelectedMsg is sent when the user selects an approval option.
+type ApprovalSelectedMsg struct {
+	SessionID string
+	Shortcut  string // the number key to send (e.g., "1", "2", "3")
 }

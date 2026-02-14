@@ -75,7 +75,7 @@ func main() {
 		go hookSrv.Start()
 	}
 
-	model := app.NewModel(repo, w, r, appCfg)
+	model := app.NewModel(repo, w, r, appCfg, cfg.CopilotBinPath)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 

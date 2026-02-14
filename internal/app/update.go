@@ -25,6 +25,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Approval prompt navigation: intercept keys when prompt is active
+		if m.pendingApproval != nil && m.activePTY != nil {
+			switch msg.String() {
+			case "up", "k":
+				if m.approvalCursor > 0 {
+					m.approvalCursor--
+				}
+				return m, nil
+			case "down", "j":
+				if m.approvalCursor < len(m.pendingApproval.Options)-1 {
+					m.approvalCursor++
+				}
+				return m, nil
+			case "enter":
+				opt := m.pendingApproval.Options[m.approvalCursor]
+				return m, sendApproval(m.activePTY, m.ptySessionID, opt.Shortcut)
+			case "esc":
+				// Cancel: send Esc to PTY
+				_ = m.activePTY.Write("\x1b")
+				m.pendingApproval = nil
+				m.approvalCursor = 0
+				return m, nil
+			case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+				// Direct number key selection
+				for _, opt := range m.pendingApproval.Options {
+					if opt.Shortcut == msg.String() {
+						return m, sendApproval(m.activePTY, m.ptySessionID, opt.Shortcut)
+					}
+				}
+				return m, nil
+			}
+		}
+
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
@@ -269,6 +302,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ExportCompleteMsg:
 		// Nothing to do in the model; status bar could show a flash
+
+	case PTYOutputMsg:
+		if m.selected != nil && m.selected.ID == msg.SessionID {
+			m.streamBuffer += msg.Chunk.Cleaned
+			// Reload events to pick up any new content written by the PTY session
+			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+		}
+		if m.activePTY != nil && m.ptySessionID == msg.SessionID {
+			cmds = append(cmds, streamPTY(m.activePTY, m.ptySessionID))
+		}
+
+	case PTYPromptMsg:
+		m.pendingApproval = msg.Prompt
+		m.approvalCursor = 0
+		m.ptySessionID = msg.SessionID
+		// Continue streaming for more output
+		if m.activePTY != nil {
+			cmds = append(cmds, streamPTY(m.activePTY, m.ptySessionID))
+		}
+
+	case PTYClosedMsg:
+		m.activePTY = nil
+		m.pendingApproval = nil
+		m.streamBuffer = ""
+		m.ptySessionID = ""
+		// Reload events to get the final state
+		if m.selected != nil {
+			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+		}
+
+	case ApprovalSelectedMsg:
+		m.pendingApproval = nil
+		m.approvalCursor = 0
 	}
 
 	// Route input to focused panel

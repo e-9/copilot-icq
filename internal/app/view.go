@@ -33,6 +33,11 @@ func (m Model) View() string {
 		return m.renderHelpOverlay()
 	}
 
+	// Approval prompt overlay
+	if m.pendingApproval != nil {
+		return m.renderApprovalOverlay()
+	}
+
 	borderH := 2
 	borderW := 2
 	headerH := 1
@@ -170,6 +175,10 @@ func (m Model) View() string {
 	modeLabel := ""
 	if m.renaming {
 		modeLabel = " · ✏️ renaming"
+	} else if m.pendingApproval != nil {
+		modeLabel = " · ⚡ approval pending"
+	} else if m.activePTY != nil {
+		modeLabel = " · 🔌 PTY active"
 	}
 
 	statusBar := theme.StatusBarStyle.
@@ -219,6 +228,50 @@ func (m Model) renderHelpOverlay() string {
 		Padding(2, 4).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Accent).
+		Render(sb.String())
+
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		overlay)
+}
+
+func (m Model) renderApprovalOverlay() string {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Warning)
+	questionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	selectedStyle := lipgloss.NewStyle().Bold(true).Foreground(theme.Accent)
+	unselectedStyle := lipgloss.NewStyle().Foreground(theme.Subtle)
+	hintStyle := lipgloss.NewStyle().Foreground(theme.Subtle)
+
+	var sb strings.Builder
+	sb.WriteString(titleStyle.Render("⚡ Tool Approval Required"))
+	sb.WriteString("\n\n")
+
+	if m.selected != nil {
+		sb.WriteString(hintStyle.Render(fmt.Sprintf("Session: %s", m.selected.DisplayName())))
+		sb.WriteString("\n\n")
+	}
+
+	sb.WriteString(questionStyle.Render(m.pendingApproval.Question))
+	sb.WriteString("\n\n")
+
+	for i, opt := range m.pendingApproval.Options {
+		cursor := "  "
+		style := unselectedStyle
+		if i == m.approvalCursor {
+			cursor = "❯ "
+			style = selectedStyle
+		}
+		sb.WriteString(fmt.Sprintf("%s%s. %s\n", cursor, opt.Shortcut, style.Render(opt.Label)))
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(hintStyle.Render("  ↑↓ navigate · Enter select · 1-9 shortcut · Esc cancel"))
+
+	overlay := lipgloss.NewStyle().
+		Width(m.width - 4).
+		Padding(2, 4).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Warning).
 		Render(sb.String())
 
 	return lipgloss.Place(m.width, m.height,

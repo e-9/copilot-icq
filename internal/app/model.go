@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/config"
 	"github.com/e-9/copilot-icq/internal/domain"
+	"github.com/e-9/copilot-icq/internal/infra/ptyproxy"
 	"github.com/e-9/copilot-icq/internal/infra/runner"
 	"github.com/e-9/copilot-icq/internal/infra/sessionrepo"
 	"github.com/e-9/copilot-icq/internal/infra/watcher"
@@ -44,20 +45,33 @@ type Model struct {
 	showHelp bool   // keyboard shortcuts overlay
 	renaming bool   // inline session rename mode
 	cfg      *config.AppConfig // user configuration
+
+	// PTY mode (Phase 7)
+	activePTY       *ptyproxy.Session        // running interactive PTY session
+	pendingApproval *ptyproxy.ApprovalPrompt  // detected approval prompt
+	approvalCursor  int                       // selected option index in approval UI
+	ptySessionID    string                    // session ID of the active PTY
+	streamBuffer    string                    // accumulated streaming text
+	copilotBin      string                    // path to copilot binary for PTY mode
 }
 
 // NewModel creates the initial application model.
-func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg *config.AppConfig) Model {
+func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg *config.AppConfig, copilotBin ...string) Model {
+	bin := ""
+	if len(copilotBin) > 0 {
+		bin = copilotBin[0]
+	}
 	return Model{
-		repo:     repo,
-		watcher:  w,
-		runner:   r,
-		sidebar:  sidebar.New(nil, theme.SidebarWidth, 20),
-		chat:     chat.New(80, 20),
-		input:    input.New(80),
-		unread:   make(map[string]int),
-		lastSeen: make(map[string]time.Time),
-		cfg:      cfg,
+		repo:       repo,
+		watcher:    w,
+		runner:     r,
+		sidebar:    sidebar.New(nil, theme.SidebarWidth, 20),
+		chat:       chat.New(80, 20),
+		input:      input.New(80),
+		unread:     make(map[string]int),
+		lastSeen:   make(map[string]time.Time),
+		cfg:        cfg,
+		copilotBin: bin,
 	}
 }
 

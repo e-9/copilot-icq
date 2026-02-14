@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/eventparser"
+	"github.com/e-9/copilot-icq/internal/infra/ptyproxy"
 	"github.com/e-9/copilot-icq/internal/infra/runner"
 	"github.com/e-9/copilot-icq/internal/infra/sessionrepo"
 	"github.com/e-9/copilot-icq/internal/infra/watcher"
@@ -68,4 +69,33 @@ func tickEvery(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(_ time.Time) tea.Msg {
 		return TickMsg{}
 	})
+}
+
+// streamPTY reads the next chunk from a PTY session and returns it as a Msg.
+func streamPTY(session *ptyproxy.Session, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case chunk, ok := <-session.Output():
+			if !ok {
+				return PTYClosedMsg{SessionID: sessionID}
+			}
+			if chunk.IsPrompt {
+				return PTYPromptMsg{SessionID: sessionID, Prompt: chunk.Prompt}
+			}
+			return PTYOutputMsg{SessionID: sessionID, Chunk: chunk}
+		case <-session.Done():
+			return PTYClosedMsg{SessionID: sessionID}
+		}
+	}
+}
+
+// sendApproval writes the user's selection to the PTY stdin.
+func sendApproval(session *ptyproxy.Session, sessionID, shortcut string) tea.Cmd {
+	return func() tea.Msg {
+		err := session.Write(shortcut + "\n")
+		if err != nil {
+			return PTYClosedMsg{SessionID: sessionID, Err: err}
+		}
+		return ApprovalSelectedMsg{SessionID: sessionID, Shortcut: shortcut}
+	}
 }
