@@ -122,6 +122,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.watcher.WatchSession(s.ID)
 					// Toggle input sending state based on whether this session has a pending send
 					m.input.SetSending(m.pendingSends[s.ID])
+					if !m.pendingSends[s.ID] {
+						m.input.Reset()
+					}
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
 				}
 			} else if m.focus == FocusInput {
