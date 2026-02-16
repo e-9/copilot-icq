@@ -107,15 +107,15 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 	prefix := icon + " "
 	if statusIcon != "" {
-		prefix = statusIcon + icon + " "
+		prefix = icon + " " + statusIcon
 	}
 
 	if index == m.Index() {
 		title = theme.SelectedItemStyle.Render(prefix+title) + badge
-		desc = theme.DimItemStyle.Render("  " + desc)
+		desc = theme.DimItemStyle.Render("   " + desc)
 	} else {
 		title = theme.NormalItemStyle.Render(prefix+title) + badge
-		desc = theme.DimItemStyle.Render("  " + desc)
+		desc = theme.DimItemStyle.Render("   " + desc)
 	}
 
 	fmt.Fprintf(w, "%s%s\n%s", separator, title, desc)
