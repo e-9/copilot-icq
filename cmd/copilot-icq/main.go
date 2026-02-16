@@ -175,11 +175,27 @@ func runInstallHooks() {
 					"timeoutSec": 5,
 				},
 			},
+			"preToolUse": []map[string]interface{}{
+				{
+					"type":       "command",
+					"bash":       fmt.Sprintf("%s preToolUse", hookBin),
+					"powershell": fmt.Sprintf("%s preToolUse", hookBin),
+					"timeoutSec": 10,
+				},
+			},
 			"postToolUse": []map[string]interface{}{
 				{
 					"type":       "command",
 					"bash":       fmt.Sprintf("%s postToolUse", hookBin),
 					"powershell": fmt.Sprintf("%s postToolUse", hookBin),
+					"timeoutSec": 5,
+				},
+			},
+			"userPromptSubmitted": []map[string]interface{}{
+				{
+					"type":       "command",
+					"bash":       fmt.Sprintf("%s userPromptSubmitted", hookBin),
+					"powershell": fmt.Sprintf("%s userPromptSubmitted", hookBin),
 					"timeoutSec": 5,
 				},
 			},
@@ -210,7 +226,7 @@ func runInstallHooks() {
 	fmt.Println()
 	fmt.Printf("  ✅ Created %s\n", hookFile)
 	fmt.Println()
-	fmt.Println("  Hook events: sessionStart, sessionEnd, postToolUse, errorOccurred")
+	fmt.Println("  Hook events: sessionStart, sessionEnd, preToolUse, postToolUse, userPromptSubmitted, errorOccurred")
 	fmt.Println("  The TUI will receive real-time notifications when Copilot CLI fires these hooks.")
 	fmt.Println()
 	fmt.Printf("  Make sure '%s' is in your PATH.\n", hookBin)

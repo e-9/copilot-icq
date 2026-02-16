@@ -9,12 +9,14 @@ import (
 
 // AppConfig holds user-configurable settings loaded from ~/.copilot-icq/config.yaml.
 type AppConfig struct {
-	SecurityMode  string   `yaml:"security_mode"`  // "scoped" (default) or "full-auto"
-	AllowedTools  []string `yaml:"allowed_tools"`   // tools allowed in scoped mode
-	ExportDir     string   `yaml:"export_dir"`      // directory for conversation exports
-	Notifications struct {
-		OS   bool   `yaml:"os"`   // enable OS desktop notifications
-		Push bool   `yaml:"push"` // enable ntfy.sh push notifications
+	SecurityMode   string   `yaml:"security_mode"`   // "scoped" (default) or "full-auto"
+	AllowedTools   []string `yaml:"allowed_tools"`    // tools allowed in scoped mode
+	DeniedTools    []string `yaml:"denied_tools"`     // tools blocked via preToolUse hook
+	DeniedPatterns []string `yaml:"denied_patterns"`  // arg patterns blocked via preToolUse hook
+	ExportDir      string   `yaml:"export_dir"`       // directory for conversation exports
+	Notifications  struct {
+		OS    bool   `yaml:"os"`    // enable OS desktop notifications
+		Push  bool   `yaml:"push"`  // enable ntfy.sh push notifications
 		Topic string `yaml:"topic"` // ntfy.sh topic
 	} `yaml:"notifications"`
 }

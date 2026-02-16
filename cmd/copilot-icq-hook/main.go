@@ -7,7 +7,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // hookPayload is the envelope sent to the TUI via Unix socket.
@@ -17,6 +20,20 @@ type hookPayload struct {
 	CWD       string          `json:"cwd"`
 	Timestamp string          `json:"timestamp"`
 	Data      json.RawMessage `json:"data"`
+}
+
+// preToolUseInput is the JSON structure Copilot CLI sends for preToolUse events.
+type preToolUseInput struct {
+	SessionID string `json:"sessionId"`
+	CWD       string `json:"cwd"`
+	ToolName  string `json:"toolName"`
+	ToolArgs  string `json:"toolArgs"`
+}
+
+// denyConfig mirrors the deny fields from ~/.copilot-icq/config.yaml.
+type denyConfig struct {
+	DeniedTools    []string `yaml:"denied_tools"`
+	DeniedPatterns []string `yaml:"denied_patterns"`
 }
 
 func main() {
@@ -50,6 +67,11 @@ func main() {
 		cwd, _ = os.Getwd()
 	}
 
+	// Handle preToolUse deny policy
+	if eventName == "preToolUse" {
+		handlePreToolUse(stdinData)
+	}
+
 	payload := hookPayload{
 		Event:     eventName,
 		SessionID: sessionID,
@@ -77,8 +99,66 @@ func main() {
 	conn.Write(data)
 }
 
+// handlePreToolUse checks the tool against the deny policy and outputs
+// a deny decision to stdout if matched. Copilot CLI reads this response.
+func handlePreToolUse(stdinData []byte) {
+	var input preToolUseInput
+	if err := json.Unmarshal(stdinData, &input); err != nil {
+		return
+	}
+
+	cfg := loadDenyConfig()
+	if cfg == nil {
+		return
+	}
+
+	// Check denied tools
+	toolLower := strings.ToLower(input.ToolName)
+	for _, denied := range cfg.DeniedTools {
+		if strings.ToLower(denied) == toolLower {
+			outputDeny(fmt.Sprintf("Tool '%s' is blocked by policy", input.ToolName))
+			return
+		}
+	}
+
+	// Check denied patterns against tool args
+	argsLower := strings.ToLower(input.ToolArgs)
+	for _, pattern := range cfg.DeniedPatterns {
+		if strings.Contains(argsLower, strings.ToLower(pattern)) {
+			outputDeny(fmt.Sprintf("Blocked by pattern: %s", pattern))
+			return
+		}
+	}
+}
+
+func outputDeny(reason string) {
+	resp := map[string]string{
+		"permissionDecision":       "deny",
+		"permissionDecisionReason": reason,
+	}
+	json.NewEncoder(os.Stdout).Encode(resp)
+}
+
+func loadDenyConfig() *denyConfig {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".copilot-icq", "config.yaml"))
+	if err != nil {
+		return nil
+	}
+	var cfg denyConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil
+	}
+	if len(cfg.DeniedTools) == 0 && len(cfg.DeniedPatterns) == 0 {
+		return nil
+	}
+	return &cfg
+}
+
 func socketPath() string {
-	// Allow override via env var
 	if p := os.Getenv("COPILOT_ICQ_SOCKET"); p != "" {
 		return p
 	}
