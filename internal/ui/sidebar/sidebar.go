@@ -107,7 +107,7 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 	prefix := icon + " "
 	if statusIcon != "" {
-		prefix = icon + " " + statusIcon
+		prefix = icon + " " + statusIcon + " "
 	}
 
 	if index == m.Index() {
