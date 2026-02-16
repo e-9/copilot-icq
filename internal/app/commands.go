@@ -50,10 +50,10 @@ func watchFiles(w *watcher.Watcher) tea.Cmd {
 }
 
 // sendMessage dispatches a message to a copilot session via the runner.
-func sendMessage(r *runner.Runner, sessionID, message string) tea.Cmd {
+func sendMessage(r *runner.Runner, sessionID, message, cwd string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		result := r.Send(ctx, sessionID, message)
+		result := r.Send(ctx, sessionID, message, cwd)
 		return MessageSentMsg{
 			SessionID: result.SessionID,
 			Success:   result.Success,

@@ -139,7 +139,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					text := m.input.Value()
 					if text != "" && m.selected != nil && m.runner != nil && !m.input.IsSending() {
 						m.input.SetSending(true)
-						cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text))
+						cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text, m.selected.CWD))
 					}
 				}
 			}
