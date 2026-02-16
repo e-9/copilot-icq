@@ -25,9 +25,10 @@ func (i Item) FilterValue() string { return i.Session.DisplayName() + " " + i.Se
 
 // ItemDelegate renders each session item in the list.
 type ItemDelegate struct {
-	Unread   map[string]int
-	LastSeen map[string]time.Time
-	ActiveID string
+	Unread       map[string]int
+	LastSeen     map[string]time.Time
+	PendingSends map[string]bool
+	ActiveID     string
 }
 
 func (d ItemDelegate) Height() int                             { return 2 }
@@ -64,7 +65,16 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		icon = "◉"
 	}
 
+	// Status icon for non-active sessions: ⏳ in-progress, 🔔 has response
+	statusIcon := ""
 	curIsActive := item.Session.ID == d.ActiveID
+	if !curIsActive {
+		if d.PendingSends[item.Session.ID] {
+			statusIcon = "⏳"
+		} else if d.Unread[item.Session.ID] > 0 {
+			statusIcon = "🔔"
+		}
+	}
 	curUnread := d.Unread[item.Session.ID] > 0
 
 	// Group separator with section header labels
@@ -95,11 +105,16 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		}
 	}
 
+	prefix := icon + " "
+	if statusIcon != "" {
+		prefix = statusIcon + icon + " "
+	}
+
 	if index == m.Index() {
-		title = theme.SelectedItemStyle.Render(icon+" "+title) + badge
+		title = theme.SelectedItemStyle.Render(prefix+title) + badge
 		desc = theme.DimItemStyle.Render("  " + desc)
 	} else {
-		title = theme.NormalItemStyle.Render(icon+" "+title) + badge
+		title = theme.NormalItemStyle.Render(prefix+title) + badge
 		desc = theme.DimItemStyle.Render("  " + desc)
 	}
 
@@ -160,6 +175,11 @@ func (m *Model) SetUnread(unread map[string]int) {
 // SetLastSeen updates the last-seen timestamps for activity indicators.
 func (m *Model) SetLastSeen(lastSeen map[string]time.Time) {
 	m.delegate.LastSeen = lastSeen
+}
+
+// SetPendingSends updates which sessions have in-flight messages.
+func (m *Model) SetPendingSends(pending map[string]bool) {
+	m.delegate.PendingSends = pending
 }
 
 // IsFiltering returns true if the list is in active filter mode.

@@ -145,6 +145,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if text != "" && m.selected != nil && m.runner != nil && !m.pendingSends[m.selected.ID] {
 						m.pendingSends[m.selected.ID] = true
 						m.input.SetSending(true)
+						m.sidebar.SetPendingSends(m.pendingSends)
 						cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text, m.selected.CWD))
 					}
 				}
@@ -248,6 +249,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case MessageSentMsg:
 		delete(m.pendingSends, msg.SessionID)
+		m.sidebar.SetPendingSends(m.pendingSends)
 		// Only update input if we're still viewing the session that finished
 		if m.selected != nil && m.selected.ID == msg.SessionID {
 			m.input.SetSending(false)
