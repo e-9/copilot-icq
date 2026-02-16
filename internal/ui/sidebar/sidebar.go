@@ -85,12 +85,12 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 			if prevIsActive && !curIsActive {
 				if curUnread {
-					separator = sectionHeader("Notifications", m) + "\n"
+					separator = "\n" + sectionHeader("Notifications", m) + "\n"
 				} else {
-					separator = sectionHeader("Idle", m) + "\n"
+					separator = "\n" + sectionHeader("Idle", m) + "\n"
 				}
 			} else if prevUnread && !curUnread && !curIsActive {
-				separator = sectionHeader("Idle", m) + "\n"
+				separator = "\n" + sectionHeader("Idle", m) + "\n"
 			}
 		}
 	}

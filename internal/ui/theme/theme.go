@@ -90,7 +90,7 @@ func RenderTitledBorder(title, content string, width, height int, focused bool) 
 	bodyStyle := lipgloss.NewStyle().
 		Width(innerWidth).
 		Height(height).
-		MaxHeight(height).
+		MaxHeight(height + 1). // +1 for bottom border line
 		BorderStyle(border).
 		BorderTop(false).
 		BorderBottom(true).
