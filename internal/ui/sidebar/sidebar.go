@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -63,19 +64,33 @@ func (d ItemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		icon = "◉"
 	}
 
-	// Group separator: render a dim line between unread and idle groups
+	curIsActive := item.Session.ID == d.ActiveID
+	curUnread := d.Unread[item.Session.ID] > 0
+
+	// Group separator with section header labels
 	separator := ""
-	if d.ActiveID != "" && index > 0 {
+	if index == 0 {
+		if curIsActive {
+			separator = sectionHeader("Active", m) + "\n"
+		} else if curUnread {
+			separator = sectionHeader("Notifications", m) + "\n"
+		} else {
+			separator = sectionHeader("Idle", m) + "\n"
+		}
+	} else if d.ActiveID != "" {
 		prevItem, ok := m.Items()[index-1].(Item)
 		if ok {
 			prevUnread := d.Unread[prevItem.Session.ID] > 0
 			prevIsActive := prevItem.Session.ID == d.ActiveID
-			curUnread := d.Unread[item.Session.ID] > 0
-			curIsActive := item.Session.ID == d.ActiveID
 
-			// Show separator when transitioning between groups
-			if (prevIsActive && !curIsActive) || (prevUnread && !curUnread && !curIsActive) {
-				separator = lipgloss.NewStyle().Foreground(theme.Subtle).Render("  ─────────────────────") + "\n"
+			if prevIsActive && !curIsActive {
+				if curUnread {
+					separator = sectionHeader("Notifications", m) + "\n"
+				} else {
+					separator = sectionHeader("Idle", m) + "\n"
+				}
+			} else if prevUnread && !curUnread && !curIsActive {
+				separator = sectionHeader("Idle", m) + "\n"
 			}
 		}
 	}
@@ -192,6 +207,17 @@ func (m Model) View() string {
 		Height(m.Height).
 		MaxHeight(m.Height).
 		Render(content)
+}
+
+func sectionHeader(label string, m list.Model) string {
+	styled := theme.SectionHeaderStyle.Render(" " + label + " ")
+	labelW := lipgloss.Width(styled)
+	fillW := m.Width() - labelW - 1
+	if fillW < 0 {
+		fillW = 0
+	}
+	fill := lipgloss.NewStyle().Foreground(theme.Subtle).Render(strings.Repeat("╶", fillW))
+	return styled + fill
 }
 
 func shortenPath(path string, maxLen int) string {

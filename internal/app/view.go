@@ -9,16 +9,6 @@ import (
 	"github.com/e-9/copilot-icq/internal/ui/theme"
 )
 
-var (
-	focusedBorder = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(theme.Accent)
-
-	unfocusedBorder = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("238"))
-)
-
 func (m Model) View() string {
 	if !m.ready {
 		return "Loading..."
@@ -93,59 +83,39 @@ func (m Model) View() string {
 		chatInnerW = 1
 	}
 
-	// Sidebar panel — MaxHeight clips overflow from list component
-	sidebarRenderedH := panelHeight + borderH
+	// Sidebar panel with titled border
 	sidebarContent := m.sidebar.View()
-	sidebarBorder := unfocusedBorder.Width(sidebarInnerW).Height(panelHeight).MaxHeight(sidebarRenderedH)
-	if m.focus == FocusSidebar {
-		sidebarBorder = focusedBorder.Width(sidebarInnerW).Height(panelHeight).MaxHeight(sidebarRenderedH)
-	}
-	sidebarView := sidebarBorder.Render(sidebarContent)
+	sidebarView := theme.RenderTitledBorder("Sessions", sidebarContent, sidebarInnerW, panelHeight, m.focus == FocusSidebar)
 
 	// Right panel (chat + input)
 	var rightPanel string
 	if m.renaming {
-		// Show rename input in the right panel unconditionally
 		renameLabel := lipgloss.NewStyle().
 			Foreground(theme.Accent).Bold(true).
 			Render("  ✏️  Rename session (Enter to save, Esc to cancel)")
-		labelBorder := unfocusedBorder.Width(chatInnerW).Height(panelHeight - 1 - borderH).MaxHeight(sidebarRenderedH - 1 - borderH)
-		labelView := labelBorder.Render(renameLabel)
+		labelView := theme.RenderTitledBorder("Rename", renameLabel, chatInnerW, panelHeight-1-borderH, false)
 
-		inputInnerH := 1
-		inputRenderedH := inputInnerH + borderH
 		inputContent := m.input.View()
-		inputBorder := focusedBorder.Width(chatInnerW).Height(inputInnerH).MaxHeight(inputRenderedH)
-		inputView := inputBorder.Render(inputContent)
+		inputView := theme.RenderTitledBorder("Input", inputContent, chatInnerW, 1, true)
 
 		rightPanel = lipgloss.JoinVertical(lipgloss.Left, labelView, inputView)
 	} else if m.selected == nil {
 		placeholder := lipgloss.NewStyle().
 			Foreground(theme.Subtle).
 			Render("  Select a session and press Enter to view conversation")
-		rightBorder := unfocusedBorder.Width(chatInnerW).Height(panelHeight).MaxHeight(sidebarRenderedH)
-		rightPanel = rightBorder.Render(placeholder)
+		rightPanel = theme.RenderTitledBorder("Chat", placeholder, chatInnerW, panelHeight, false)
 	} else {
 		inputInnerH := 1
 		chatInnerH := panelHeight - inputInnerH - borderH
-		chatRenderedH := chatInnerH + borderH
-		inputRenderedH := inputInnerH + borderH
 
-		// Chat viewport
+		// Chat viewport with session name in title
+		chatTitle := fmt.Sprintf("Chat · %s (%s)", m.selected.DisplayName(), m.selected.ShortID())
 		chatContent := m.chat.View()
-		chatBorder := unfocusedBorder.Width(chatInnerW).Height(chatInnerH).MaxHeight(chatRenderedH)
-		if m.focus == FocusChat {
-			chatBorder = focusedBorder.Width(chatInnerW).Height(chatInnerH).MaxHeight(chatRenderedH)
-		}
-		chatView := chatBorder.Render(chatContent)
+		chatView := theme.RenderTitledBorder(chatTitle, chatContent, chatInnerW, chatInnerH, m.focus == FocusChat)
 
 		// Input area
 		inputContent := m.input.View()
-		inputBorder := unfocusedBorder.Width(chatInnerW).Height(inputInnerH).MaxHeight(inputRenderedH)
-		if m.focus == FocusInput {
-			inputBorder = focusedBorder.Width(chatInnerW).Height(inputInnerH).MaxHeight(inputRenderedH)
-		}
-		inputView := inputBorder.Render(inputContent)
+		inputView := theme.RenderTitledBorder("Input", inputContent, chatInnerW, inputInnerH, m.focus == FocusInput)
 
 		rightPanel = lipgloss.JoinVertical(lipgloss.Left, chatView, inputView)
 	}
