@@ -120,6 +120,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sidebar.SetUnread(m.unread)
 					m.sidebar.ClearFilterAndSetItems(m.sessions) // clear filter + re-sort
 					m.watcher.WatchSession(s.ID)
+					// Toggle input sending state based on whether this session has a pending send
+					m.input.SetSending(m.pendingSends[s.ID])
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
 				}
 			} else if m.focus == FocusInput {
@@ -137,7 +139,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.input.Blur()
 				} else {
 					text := m.input.Value()
-					if text != "" && m.selected != nil && m.runner != nil && !m.input.IsSending() {
+					if text != "" && m.selected != nil && m.runner != nil && !m.pendingSends[m.selected.ID] {
+						m.pendingSends[m.selected.ID] = true
 						m.input.SetSending(true)
 						cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text, m.selected.CWD))
 					}
@@ -241,7 +244,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tickEvery(5*time.Second))
 
 	case MessageSentMsg:
-		m.input.SetSending(false)
+		delete(m.pendingSends, msg.SessionID)
+		// Only update input if we're still viewing the session that finished
+		if m.selected != nil && m.selected.ID == msg.SessionID {
+			m.input.SetSending(false)
+		}
 		if msg.Err != nil {
 			m.err = msg.Err
 		} else {

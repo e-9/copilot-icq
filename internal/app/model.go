@@ -43,7 +43,8 @@ type Model struct {
 	err      error
 	showHelp bool   // keyboard shortcuts overlay
 	renaming bool   // inline session rename mode
-	cfg      *config.AppConfig // user configuration
+	pendingSends map[string]bool   // sessionID → has in-flight copilot subprocess
+	cfg          *config.AppConfig // user configuration
 }
 
 // NewModel creates the initial application model.
@@ -55,9 +56,10 @@ func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg 
 		sidebar:  sidebar.New(nil, theme.SidebarWidth, 20),
 		chat:     chat.New(80, 20),
 		input:    input.New(80),
-		unread:   make(map[string]int),
-		lastSeen: make(map[string]time.Time),
-		cfg:      cfg,
+		unread:       make(map[string]int),
+		lastSeen:     make(map[string]time.Time),
+		pendingSends: make(map[string]bool),
+		cfg:          cfg,
 	}
 }
 
