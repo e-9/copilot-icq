@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -71,14 +72,17 @@ func tickEvery(d time.Duration) tea.Cmd {
 	})
 }
 
-// approveSession hands terminal control to copilot via tea.ExecProcess.
-// The TUI suspends, the user interacts with copilot natively, then TUI resumes.
+// approveSession opens a new Terminal.app window with copilot --resume for the session.
+// The TUI stays running while the user interacts in the native terminal.
 func approveSession(copilotBin, sessionID, cwd string) tea.Cmd {
-	c := exec.Command(copilotBin, "--resume", sessionID)
-	if cwd != "" {
-		c.Dir = cwd
-	}
-	return tea.ExecProcess(c, func(err error) tea.Msg {
+	return func() tea.Msg {
+		script := fmt.Sprintf(
+			`tell application "Terminal"
+				activate
+				do script "cd %s && %s --resume %s"
+			end tell`, cwd, copilotBin, sessionID)
+		cmd := exec.Command("osascript", "-e", script)
+		err := cmd.Run()
 		return ApprovalFinishedMsg{SessionID: sessionID, Err: err}
-	})
+	}
 }
