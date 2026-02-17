@@ -315,7 +315,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chat.SetPendingTools(nil)
 			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
 		}
+		if msg.Err != nil {
+			m.statusFlash = fmt.Sprintf("⚠️  Session handoff failed: %v", msg.Err)
+			cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
+		}
 		cmds = append(cmds, loadSessions(m.repo))
+
+	case ClearFlashMsg:
+		m.statusFlash = ""
 	}
 
 	// Route input to focused panel

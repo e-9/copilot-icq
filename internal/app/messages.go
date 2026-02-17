@@ -54,3 +54,6 @@ type ApprovalFinishedMsg struct {
 	SessionID string
 	Err       error
 }
+
+// ClearFlashMsg clears the transient status bar message.
+type ClearFlashMsg struct{}

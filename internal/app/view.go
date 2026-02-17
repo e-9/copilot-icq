@@ -141,6 +141,9 @@ func (m Model) View() string {
 	if m.renaming {
 		modeLabel = " · ✏️ renaming"
 	}
+	if m.statusFlash != "" {
+		modeLabel = " · " + m.statusFlash
+	}
 
 	statusBar := theme.StatusBarStyle.
 		Width(m.width).

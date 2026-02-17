@@ -43,6 +43,7 @@ type Model struct {
 	err      error
 	showHelp bool   // keyboard shortcuts overlay
 	renaming bool   // inline session rename mode
+	statusFlash string // transient status bar message
 	pendingSends map[string]bool          // sessionID → has in-flight copilot subprocess
 	pendingTools map[string][]PendingTool // sessionID → tools awaiting execution
 	cfg          *config.AppConfig        // user configuration
