@@ -163,6 +163,7 @@ func (m Model) renderHelpOverlay() string {
 		{"/ (sidebar)", "Filter sessions by name"},
 		{"?", "Toggle this help overlay"},
 		{"t", "Toggle tool call details (expand/collapse)"},
+		{"a (chat)", "Open session in terminal (interactive approval)"},
 		{"r", "Refresh session list"},
 		{"R (Shift+R)", "Rename selected session"},
 		{"e", "Export conversation to markdown"},

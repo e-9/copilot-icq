@@ -96,6 +96,11 @@ func (r *Runner) Send(ctx context.Context, sessionID, message, cwd string) Resul
 	}
 }
 
+// CopilotBin returns the path to the copilot binary.
+func (r *Runner) CopilotBin() string {
+	return r.copilotBin
+}
+
 // Mode returns the current security mode.
 func (r *Runner) Mode() SecurityMode {
 	return r.securityMode

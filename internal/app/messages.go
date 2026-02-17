@@ -48,3 +48,9 @@ type ExportCompleteMsg struct {
 	Path string
 	Err  error
 }
+
+// ApprovalFinishedMsg is sent when tea.ExecProcess returns from copilot handoff.
+type ApprovalFinishedMsg struct {
+	SessionID string
+	Err       error
+}

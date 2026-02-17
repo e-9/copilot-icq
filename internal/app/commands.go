@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -67,5 +68,17 @@ func sendMessage(r *runner.Runner, sessionID, message, cwd string) tea.Cmd {
 func tickEvery(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(_ time.Time) tea.Msg {
 		return TickMsg{}
+	})
+}
+
+// approveSession hands terminal control to copilot via tea.ExecProcess.
+// The TUI suspends, the user interacts with copilot natively, then TUI resumes.
+func approveSession(copilotBin, sessionID, cwd string) tea.Cmd {
+	c := exec.Command(copilotBin, "--resume", sessionID)
+	if cwd != "" {
+		c.Dir = cwd
+	}
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return ApprovalFinishedMsg{SessionID: sessionID, Err: err}
 	})
 }

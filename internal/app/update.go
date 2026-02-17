@@ -75,6 +75,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.chat.ToggleAllToolCalls()
 				return m, nil
 			}
+		case "a":
+			// Hand off terminal to copilot for interactive approval
+			if m.focus == FocusChat && m.selected != nil && m.runner != nil {
+				return m, approveSession(m.runner.CopilotBin(), m.selected.ID, m.selected.CWD)
+			}
 		case "tab":
 			switch m.focus {
 			case FocusSidebar:
@@ -302,6 +307,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ExportCompleteMsg:
 		// Nothing to do in the model; status bar could show a flash
+
+	case ApprovalFinishedMsg:
+		// TUI resumed after copilot handoff — reload events to see what happened
+		delete(m.pendingTools, msg.SessionID)
+		if m.selected != nil && m.selected.ID == msg.SessionID {
+			m.chat.SetPendingTools(nil)
+			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+		}
+		cmds = append(cmds, loadSessions(m.repo))
 	}
 
 	// Route input to focused panel
