@@ -12,6 +12,15 @@ type HookEventMsg struct {
 	Body      string
 }
 
+// HookPreToolMsg is sent when a preToolUse hook event arrives.
+type HookPreToolMsg struct {
+	SessionID string
+	ToolName  string
+	ToolArgs  string
+	Denied    bool
+	DenyReason string
+}
+
 // TUINotifier sends notifications into the Bubble Tea event loop.
 type TUINotifier struct {
 	program *tea.Program
@@ -33,4 +42,11 @@ func (t *TUINotifier) Notify(n Notification) error {
 		})
 	}
 	return nil
+}
+
+// NotifyPreTool sends a HookPreToolMsg into the Bubble Tea event loop.
+func (t *TUINotifier) NotifyPreTool(msg HookPreToolMsg) {
+	if t.program != nil {
+		t.program.Send(msg)
+	}
 }

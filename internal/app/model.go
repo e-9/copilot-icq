@@ -43,8 +43,17 @@ type Model struct {
 	err      error
 	showHelp bool   // keyboard shortcuts overlay
 	renaming bool   // inline session rename mode
-	pendingSends map[string]bool   // sessionID → has in-flight copilot subprocess
-	cfg          *config.AppConfig // user configuration
+	pendingSends map[string]bool          // sessionID → has in-flight copilot subprocess
+	pendingTools map[string][]PendingTool // sessionID → tools awaiting execution
+	cfg          *config.AppConfig        // user configuration
+}
+
+// PendingTool represents a tool about to be executed, received via preToolUse hook.
+type PendingTool struct {
+	ToolName   string
+	ToolArgs   string
+	Denied     bool
+	DenyReason string
 }
 
 // NewModel creates the initial application model.
@@ -59,6 +68,7 @@ func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg 
 		unread:       make(map[string]int),
 		lastSeen:     make(map[string]time.Time),
 		pendingSends: make(map[string]bool),
+		pendingTools: make(map[string][]PendingTool),
 		cfg:          cfg,
 	}
 }

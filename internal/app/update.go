@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/notifier"
+	"github.com/e-9/copilot-icq/internal/ui/chat"
 	"github.com/e-9/copilot-icq/internal/ui/theme"
 	"gopkg.in/yaml.v3"
 )
@@ -126,6 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.input.Reset()
 					}
 					cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
+					m.chat.SetPendingTools(m.pendingToolsForChat())
 				}
 			} else if m.focus == FocusInput {
 				if m.renaming {
@@ -265,13 +267,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.SessionID != "" {
 			m.lastSeen[msg.SessionID] = time.Now()
 			m.sidebar.SetLastSeen(m.lastSeen)
+			// postToolUse means tool finished — clear pending tools for this session
+			if msg.Event == "postToolUse" {
+				delete(m.pendingTools, msg.SessionID)
+			}
 			if m.selected == nil || m.selected.ID != msg.SessionID {
 				m.unread[msg.SessionID]++
 				m.sidebar.SetUnread(m.unread)
 			} else {
 				cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
+				// Update chat with pending tools for selected session
+				m.chat.SetPendingTools(m.pendingToolsForChat())
 			}
 			m.sidebar.SetItems(m.sessions)
+		}
+
+	case notifier.HookPreToolMsg:
+		if msg.SessionID != "" {
+			m.pendingTools[msg.SessionID] = append(m.pendingTools[msg.SessionID], PendingTool{
+				ToolName:   msg.ToolName,
+				ToolArgs:   msg.ToolArgs,
+				Denied:     msg.Denied,
+				DenyReason: msg.DenyReason,
+			})
+			if m.selected != nil && m.selected.ID == msg.SessionID {
+				m.chat.SetPendingTools(m.pendingToolsForChat())
+			}
 		}
 
 	case SessionRenamedMsg:
@@ -392,4 +413,26 @@ func (m Model) exportConversation() tea.Cmd {
 
 		return ExportCompleteMsg{Path: outPath}
 	}
+}
+
+// pendingToolsForChat returns pending tools for the currently selected session
+// in the format the chat panel expects.
+func (m Model) pendingToolsForChat() []chat.PendingTool {
+	if m.selected == nil {
+		return nil
+	}
+	tools := m.pendingTools[m.selected.ID]
+	if len(tools) == 0 {
+		return nil
+	}
+	result := make([]chat.PendingTool, len(tools))
+	for i, t := range tools {
+		result[i] = chat.PendingTool{
+			ToolName:   t.ToolName,
+			ToolArgs:   t.ToolArgs,
+			Denied:     t.Denied,
+			DenyReason: t.DenyReason,
+		}
+	}
+	return result
 }

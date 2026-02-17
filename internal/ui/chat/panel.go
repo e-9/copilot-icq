@@ -12,15 +12,24 @@ import (
 	"github.com/e-9/copilot-icq/internal/ui/theme"
 )
 
+// PendingTool represents a tool about to be executed, from preToolUse hook.
+type PendingTool struct {
+	ToolName   string
+	ToolArgs   string
+	Denied     bool
+	DenyReason string
+}
+
 // Model represents the chat panel showing conversation history.
 type Model struct {
-	viewport  viewport.Model
-	messages  []domain.Message
-	width     int
-	height    int
-	ready     bool
-	mdRender  *glamour.TermRenderer
-	collapsed map[int]bool // tool call indices collapsed state
+	viewport     viewport.Model
+	messages     []domain.Message
+	width        int
+	height       int
+	ready        bool
+	mdRender     *glamour.TermRenderer
+	collapsed    map[int]bool // tool call indices collapsed state
+	pendingTools []PendingTool
 }
 
 // New creates a new chat panel.
@@ -75,6 +84,13 @@ func (m *Model) AppendMessages(msgs []domain.Message) {
 	m.viewport.GotoBottom()
 }
 
+// SetPendingTools updates the pending tool list and re-renders.
+func (m *Model) SetPendingTools(tools []PendingTool) {
+	m.pendingTools = tools
+	m.viewport.SetContent(m.renderMessages())
+	m.viewport.GotoBottom()
+}
+
 // ToggleAllToolCalls toggles collapse state for all tool calls.
 func (m *Model) ToggleAllToolCalls() {
 	// Count total tool calls
@@ -115,7 +131,7 @@ func (m Model) View() string {
 }
 
 func (m Model) renderMessages() string {
-	if len(m.messages) == 0 {
+	if len(m.messages) == 0 && len(m.pendingTools) == 0 {
 		return lipgloss.NewStyle().
 			Foreground(theme.Subtle).
 			Render("  No messages yet")
@@ -127,6 +143,29 @@ func (m Model) renderMessages() string {
 		sb.WriteString(m.renderMessage(msg, m.width-2, &toolIdx))
 		sb.WriteString("\n")
 	}
+
+	// Render pending tools from preToolUse hooks
+	for _, pt := range m.pendingTools {
+		if pt.Denied {
+			sb.WriteString(lipgloss.NewStyle().Foreground(theme.Error).Bold(true).
+				Render(fmt.Sprintf("  🚫 %s — blocked: %s", pt.ToolName, pt.DenyReason)))
+		} else {
+			sb.WriteString(lipgloss.NewStyle().Foreground(theme.Warning).Bold(true).
+				Render(fmt.Sprintf("  ⚡ %s — pending approval", pt.ToolName)))
+			if pt.ToolArgs != "" {
+				// Show a truncated preview of the args
+				args := pt.ToolArgs
+				if len(args) > 80 {
+					args = args[:77] + "..."
+				}
+				sb.WriteString("\n")
+				sb.WriteString(lipgloss.NewStyle().Foreground(theme.Subtle).
+					Render(fmt.Sprintf("    %s", args)))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
 	return sb.String()
 }
 

@@ -95,6 +95,19 @@ func main() {
 	if hookSrv != nil {
 		go func() {
 			for evt := range hookSrv.Events() {
+				// For preToolUse, send a richer message with tool info
+				if evt.Event == "preToolUse" {
+					var toolData struct {
+						ToolName  string `json:"toolName"`
+						ToolArgs  string `json:"toolArgs"`
+					}
+					json.Unmarshal(evt.Data, &toolData)
+					tuiNotifier.NotifyPreTool(notifier.HookPreToolMsg{
+						SessionID: evt.SessionID,
+						ToolName:  toolData.ToolName,
+						ToolArgs:  toolData.ToolArgs,
+					})
+				}
 				router.Notify(notifier.Notification{
 					SessionID: evt.SessionID,
 					Event:     evt.Event,
