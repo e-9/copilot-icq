@@ -135,6 +135,15 @@ func sdkSendMessage(a *copilot.Adapter, sessionID, text string) tea.Cmd {
 	}
 }
 
+
+// sdkAbort cancels the current message processing via the SDK.
+func sdkAbort(a *copilot.Adapter, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		_ = a.Abort(context.Background(), sessionID)
+		// The SDK will send SessionIdle via Events channel
+		return nil
+	}
+}
 // listenSDKEvents reads from the SDK adapter's Events channel.
 func listenSDKEvents(a *copilot.Adapter) tea.Cmd {
 	return func() tea.Msg {

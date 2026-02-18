@@ -31,6 +31,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+c":
+			// If a message is being sent via SDK, abort it instead of quitting
+			if m.adapter != nil && m.selected != nil && m.pendingSends[m.selected.ID] && m.sdkResumed[m.selected.ID] {
+				cmds = append(cmds, sdkAbort(m.adapter, m.selected.ID))
+				return m, tea.Batch(cmds...)
+			}
 			return m, tea.Quit
 		case "q":
 			if m.focus != FocusInput {
