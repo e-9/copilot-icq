@@ -29,7 +29,7 @@ type Adapter struct {
 // New creates a new Adapter. Call Start() to connect to the Copilot CLI.
 func New() *Adapter {
 	client := sdk.NewClient(&sdk.ClientOptions{
-		UseStdio:    true,
+		UseStdio:    sdk.Bool(true),
 		AutoStart:   sdk.Bool(true),
 		AutoRestart: sdk.Bool(true),
 		LogLevel:    "error",
@@ -221,7 +221,7 @@ func (a *Adapter) makeUserInputHandler(sessionID string) sdk.UserInputHandler {
 			UserInput: &UserInputEvent{
 				Question:      req.Question,
 				Choices:       req.Choices,
-				AllowFreeform: req.AllowFreeform,
+				AllowFreeform: req.AllowFreeform == nil || *req.AllowFreeform,
 				Response:      respCh,
 			},
 		}
