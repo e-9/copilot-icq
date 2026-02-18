@@ -98,6 +98,8 @@ func (a *Adapter) ResumeSession(ctx context.Context, sessionID string) error {
 
 	session, err := a.client.ResumeSessionWithOptions(ctx, sessionID, &sdk.ResumeSessionConfig{
 		Streaming: true,
+		OnPermissionRequest: a.makePermissionHandler(sessionID),
+		OnUserInputRequest:  a.makeUserInputHandler(sessionID),
 	})
 	if err != nil {
 		return fmt.Errorf("resume session %s: %w", sessionID, err)
@@ -175,6 +177,62 @@ func (a *Adapter) IsResumed(sessionID string) bool {
 	defer a.mu.Unlock()
 	_, ok := a.sessions[sessionID]
 	return ok
+}
+
+
+// makePermissionHandler creates a permission handler that routes requests through the Events channel.
+func (a *Adapter) makePermissionHandler(sessionID string) sdk.PermissionHandler {
+	return func(req sdk.PermissionRequest, inv sdk.PermissionInvocation) (sdk.PermissionRequestResult, error) {
+		respCh := make(chan PermissionResponse, 1)
+
+		toolName := ""
+		if name, ok := req.Extra["toolName"]; ok {
+			toolName, _ = name.(string)
+		}
+		action := req.Kind
+
+		a.Events <- Event{
+			Type:      EventPermission,
+			SessionID: sessionID,
+			Permission: &PermissionEvent{
+				ToolName: toolName,
+				Action:   action,
+				Response: respCh,
+			},
+		}
+
+		// Block until the TUI user responds
+		resp := <-respCh
+		if resp.Allow {
+			return sdk.PermissionRequestResult{Kind: "allow"}, nil
+		}
+		return sdk.PermissionRequestResult{Kind: "deny"}, nil
+	}
+}
+
+// makeUserInputHandler creates a user input handler that routes requests through the Events channel.
+func (a *Adapter) makeUserInputHandler(sessionID string) sdk.UserInputHandler {
+	return func(req sdk.UserInputRequest, inv sdk.UserInputInvocation) (sdk.UserInputResponse, error) {
+		respCh := make(chan UserInputResponse, 1)
+
+		a.Events <- Event{
+			Type:      EventUserInput,
+			SessionID: sessionID,
+			UserInput: &UserInputEvent{
+				Question:      req.Question,
+				Choices:       req.Choices,
+				AllowFreeform: req.AllowFreeform,
+				Response:      respCh,
+			},
+		}
+
+		// Block until the TUI user responds
+		resp := <-respCh
+		return sdk.UserInputResponse{
+			Answer:      resp.Answer,
+			WasFreeform: resp.WasFreeform,
+		}, nil
+	}
 }
 
 // metadataToSession converts SDK SessionMetadata to our domain.Session.

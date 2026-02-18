@@ -397,6 +397,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case copilot.EventLifecycle:
 			// Session created/deleted/updated — refresh session list
 			cmds = append(cmds, sdkListSessions(m.adapter))
+		case copilot.EventPermission:
+			if evt.Permission != nil {
+				// For now, auto-allow permissions (Phase 8d will add interactive approval)
+				// Add to pending tools for display
+				m.pendingTools[evt.SessionID] = append(m.pendingTools[evt.SessionID], PendingTool{
+					ToolName: evt.Permission.ToolName,
+					ToolArgs: evt.Permission.Action,
+				})
+				if m.selected != nil && m.selected.ID == evt.SessionID {
+					m.chat.SetPendingTools(m.pendingToolsForChat())
+				}
+				// Auto-allow for now
+				evt.Permission.Response <- copilot.PermissionResponse{Allow: true}
+			}
+		case copilot.EventUserInput:
+			if evt.UserInput != nil {
+				// Display question as a system message and auto-respond
+				if m.selected != nil && m.selected.ID == evt.SessionID {
+					msgs := m.chat.Messages()
+					msgs = append(msgs, domain.Message{
+						Role:    domain.RoleSystem,
+						Content: fmt.Sprintf("🤖 Agent asks: %s", evt.UserInput.Question),
+					})
+					m.chat.SetMessages(msgs)
+				}
+				// Auto-respond with empty for now (user will need interactive modal later)
+				evt.UserInput.Response <- copilot.UserInputResponse{Answer: "", WasFreeform: true}
+			}
 		}
 		// Keep listening
 		if m.adapter != nil {
