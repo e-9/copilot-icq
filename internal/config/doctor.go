@@ -104,5 +104,21 @@ func Doctor() []CheckResult {
 		}
 	}
 
+	// 5. Check SDK configuration
+	appCfg := LoadAppConfig("")
+	if appCfg.UseSDK {
+		results = append(results, CheckResult{
+			Name:   "SDK mode",
+			OK:     true,
+			Detail: "enabled (use_sdk: true in config) — uses official Copilot Go SDK",
+		})
+	} else {
+		results = append(results, CheckResult{
+			Name:   "SDK mode",
+			OK:     true,
+			Detail: "disabled (legacy mode) — set use_sdk: true in ~/.copilot-icq/config.yaml to enable",
+		})
+	}
+
 	return results
 }

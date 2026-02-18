@@ -270,6 +270,14 @@ denied_patterns: []
 # Directory for conversation exports (e key)
 export_dir: "."
 
+# Use official Copilot SDK for session management (recommended)
+# When enabled, uses github.com/github/copilot-sdk/go for:
+#   - Session discovery and resume
+#   - Message sending with streaming
+#   - Tool permission handling
+#   - User input requests (ask_user)
+use_sdk: false
+
 # Notification settings
 notifications:
   os: false     # OS desktop notifications (macOS/Linux/Windows)
@@ -287,6 +295,23 @@ notifications:
 ### Deny Policy
 
 The deny policy is enforced via the `preToolUse` hook and applies to **all sessions** — both TUI-sent and sessions running in other terminals. When a tool matches `denied_tools` or `denied_patterns`, Copilot CLI receives a deny decision and skips the tool.
+
+### SDK Mode
+
+When `use_sdk: true` is set, Copilot ICQ uses the [official GitHub Copilot Go SDK](https://github.com/github/copilot-sdk) instead of the legacy file-watching approach. Benefits:
+
+| Feature | Legacy Mode | SDK Mode |
+|---------|-------------|----------|
+| Session discovery | File system scanning | `ListSessions()` API |
+| Message history | Parse `events.jsonl` | `GetMessages()` API |
+| Send messages | Subprocess spawn | `session.Send()` with streaming |
+| Tool approval | Hook-based (external binary) | Inline `OnPermissionRequest` callback |
+| Real-time updates | `fsnotify` file watcher | Event subscription via `session.On()` |
+| Streaming | Not supported | `assistant.message_delta` events |
+| Abort | Not supported | `session.Abort()` via Ctrl+C |
+
+Both modes are available and can be switched at any time via config.
+
 
 ---
 
@@ -314,6 +339,23 @@ The deny policy is enforced via the `preToolUse` hook and applies to **all sessi
    - **Hooks** fire immediately when Copilot CLI events occur (instant, requires setup)
 4. **Sending messages** — Spawns `copilot -p "message" --resume <session-id>` subprocesses with scoped tool permissions
 5. **Security policy** — `preToolUse` hook checks deny lists before tools execute
+
+
+### Architecture (SDK Mode)
+
+When `use_sdk: true` is configured, the architecture simplifies to:
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌────────────────────┐
+│ Copilot CLI  │◄───►│ Copilot Go SDK   │◄───►│ Copilot ICQ TUI    │
+│ (subprocess) │     │ (stdio JSON-RPC) │     │                    │
+│              │     │                  │     │  ┌──────┐ ┌──────┐ │
+│  Sessions    │     │  ListSessions()  │     │  │Sidebar│ │ Chat │ │
+│  Messages    │     │  ResumeSession() │     │  └──────┘ └──────┘ │
+│  Tools       │     │  Send() / On()   │     │  ┌──────┐          │
+│  Permissions │     │  Abort()         │     │  │Input │          │
+└─────────────┘     └──────────────────┘     └────────────────────┘
+```
 
 ### Data Access
 
