@@ -138,6 +138,9 @@ func (m Model) View() string {
 	}
 
 	modeLabel := ""
+	if m.adapter != nil {
+		modeLabel = " · 🔗 SDK"
+	}
 	if m.renaming {
 		modeLabel = " · ✏️ renaming"
 	}
