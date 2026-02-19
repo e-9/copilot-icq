@@ -1,15 +1,8 @@
-.PHONY: build build-hook test lint run clean
+.PHONY: build test lint run clean
 
 # Build the main TUI binary
 build:
 	go build -o bin/copilot-icq ./cmd/copilot-icq
-
-# Build the hook companion binary
-build-hook:
-	go build -o bin/copilot-icq-hook ./cmd/copilot-icq-hook
-
-# Build all binaries
-all: build build-hook
 
 # Run the TUI
 run: build

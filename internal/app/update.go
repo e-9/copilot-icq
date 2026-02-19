@@ -1,679 +1,551 @@
 package app
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
+"fmt"
+"os"
+"path/filepath"
+"strings"
+"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	sdk "github.com/github/copilot-sdk/go"
+tea "github.com/charmbracelet/bubbletea"
+sdk "github.com/github/copilot-sdk/go"
 
-	"github.com/e-9/copilot-icq/internal/copilot"
-	"github.com/e-9/copilot-icq/internal/domain"
-	"github.com/e-9/copilot-icq/internal/infra/notifier"
-	"github.com/e-9/copilot-icq/internal/ui/chat"
-	"github.com/e-9/copilot-icq/internal/ui/theme"
-	"gopkg.in/yaml.v3"
+"github.com/e-9/copilot-icq/internal/copilot"
+"github.com/e-9/copilot-icq/internal/domain"
+"github.com/e-9/copilot-icq/internal/ui/chat"
+"github.com/e-9/copilot-icq/internal/ui/theme"
+"gopkg.in/yaml.v3"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
+var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		// Help overlay: any key dismisses
-		if m.showHelp {
-			m.showHelp = false
-			return m, nil
-		}
+switch msg := msg.(type) {
+case tea.KeyMsg:
+// Help overlay: any key dismisses
+if m.showHelp {
+m.showHelp = false
+return m, nil
+}
 
-		switch msg.String() {
-		case "ctrl+c":
-			// If a message is being sent via SDK, abort it instead of quitting
-			if m.adapter != nil && m.selected != nil && m.pendingSends[m.selected.ID] && m.sdkResumed[m.selected.ID] {
-				cmds = append(cmds, sdkAbort(m.adapter, m.selected.ID))
-				return m, tea.Batch(cmds...)
-			}
-			return m, tea.Quit
-		case "q":
-			if m.focus != FocusInput {
-				return m, tea.Quit
-			}
-		case "esc":
-			if m.renaming {
-				m.renaming = false
-				m.input.Reset()
-				m.input.ClearRenaming()
-				m.focus = FocusSidebar
-				m.input.Blur()
-				return m, nil
-			}
-			if m.focus == FocusInput {
-				m.focus = FocusChat
-				m.input.Blur()
-				return m, nil
-			}
-		case "?":
-			if m.focus != FocusInput {
-				m.showHelp = !m.showHelp
-				return m, nil
-			}
-		case "e":
-			if m.focus != FocusInput && m.selected != nil {
-				return m, m.exportConversation()
-			}
-		case "R":
-			// Shift+R: rename session (sidebar only)
-			if m.focus == FocusSidebar {
-				if s := m.sidebar.SelectedSession(); s != nil {
-					m.renaming = true
-					m.focus = FocusInput
-					m.input.SetRenaming(s.DisplayName())
-				}
-				return m, nil
-			}
-		case "r":
-			if m.focus != FocusInput {
-				if m.adapter != nil {
-					cmds = append(cmds, sdkListSessions(m.adapter))
-				} else {
-					cmds = append(cmds, loadSessions(m.repo))
-				}
-			}
-		case "t":
-			if m.focus == FocusChat {
-				m.chat.ToggleAllToolCalls()
-				return m, nil
-			}
-		case "a":
-			// Hand off terminal to copilot for interactive approval
-			if m.focus == FocusChat && m.selected != nil && m.runner != nil {
-				return m, approveSession(m.runner.CopilotBin(), m.selected.ID, m.selected.CWD)
-			}
-		case "tab":
-			switch m.focus {
-			case FocusSidebar:
-				m.focus = FocusChat
-				m.input.Blur()
-			case FocusChat:
-				if m.selected != nil && m.canSend() {
-					m.focus = FocusInput
-					m.input.Focus()
-				} else {
-					m.focus = FocusSidebar
-					m.input.Blur()
-				}
-			case FocusInput:
-				m.focus = FocusSidebar
-				m.input.Blur()
-			}
-			return m, nil
-		case "shift+tab":
-			switch m.focus {
-			case FocusSidebar:
-				if m.selected != nil && m.canSend() {
-					m.focus = FocusInput
-					m.input.Focus()
-				} else {
-					m.focus = FocusChat
-					m.input.Blur()
-				}
-			case FocusChat:
-				m.focus = FocusSidebar
-				m.input.Blur()
-			case FocusInput:
-				m.focus = FocusChat
-				m.input.Blur()
-			}
-			return m, nil
-		case "enter":
-			if m.focus == FocusSidebar && !m.sidebar.IsFiltering() {
-				if s := m.sidebar.SelectedSession(); s != nil {
-					m.selected = s
-					m.focus = FocusChat
-					m.unread[s.ID] = 0
-					m.sidebar.SetActiveID(s.ID)
-					m.sidebar.SetUnread(m.unread)
-					m.sidebar.ClearFilterAndSetItems(m.sessions) // clear filter + re-sort
-					// Toggle input sending state based on whether this session has a pending send
-					m.input.SetSending(m.pendingSends[s.ID])
-					if !m.pendingSends[s.ID] {
-						m.input.Reset()
-					}
-					if m.adapter != nil {
-						if !m.sdkResumed[s.ID] {
-							cmds = append(cmds, sdkResumeSession(m.adapter, s.ID))
-						} else {
-							cmds = append(cmds, sdkLoadHistory(m.adapter, s.ID))
-						}
-					} else {
-						m.watcher.WatchSession(s.ID)
-						cmds = append(cmds, loadEvents(m.repo.BasePath(), *s))
-					}
-					m.chat.SetPendingTools(m.pendingToolsForChat())
-				}
-			} else if m.focus == FocusInput {
-				if m.renaming {
-					// Complete rename
-					newName := m.input.Value()
-					if newName != "" && m.sidebar.SelectedSession() != nil {
-						s := m.sidebar.SelectedSession()
-						cmds = append(cmds, m.renameSession(s.ID, newName))
-					}
-					m.renaming = false
-					m.input.Reset()
-					m.input.ClearRenaming()
-					m.focus = FocusSidebar
-					m.input.Blur()
-				} else {
-					text := m.input.Value()
-					if text != "" && m.selected != nil && !m.pendingSends[m.selected.ID] {
-						if m.adapter != nil && m.sdkResumed[m.selected.ID] {
-							m.pendingSends[m.selected.ID] = true
-							m.input.SetSending(true)
-							m.sidebar.SetPendingSends(m.pendingSends)
-							m.input.Reset()
-							cmds = append(cmds, sdkSendMessage(m.adapter, m.selected.ID, text))
-						} else if m.runner != nil {
-							m.pendingSends[m.selected.ID] = true
-							m.input.SetSending(true)
-							m.sidebar.SetPendingSends(m.pendingSends)
-							cmds = append(cmds, sendMessage(m.runner, m.selected.ID, text, m.selected.CWD))
-						}
-					}
-				}
-			}
-		}
+switch msg.String() {
+case "ctrl+c":
+// If a message is being sent via SDK, abort it instead of quitting
+if m.selected != nil && m.pendingSends[m.selected.ID] && m.sdkResumed[m.selected.ID] {
+cmds = append(cmds, sdkAbort(m.adapter, m.selected.ID))
+return m, tea.Batch(cmds...)
+}
+return m, tea.Quit
+case "q":
+if m.focus != FocusInput {
+return m, tea.Quit
+}
+case "esc":
+if m.renaming {
+m.renaming = false
+m.input.Reset()
+m.input.ClearRenaming()
+m.focus = FocusSidebar
+m.input.Blur()
+return m, nil
+}
+if m.focus == FocusInput {
+m.focus = FocusChat
+m.input.Blur()
+return m, nil
+}
+case "?":
+if m.focus != FocusInput {
+m.showHelp = !m.showHelp
+return m, nil
+}
+case "e":
+if m.focus != FocusInput && m.selected != nil {
+return m, m.exportConversation()
+}
+case "R":
+// Shift+R: rename session (sidebar only)
+if m.focus == FocusSidebar {
+if s := m.sidebar.SelectedSession(); s != nil {
+m.renaming = true
+m.focus = FocusInput
+m.input.SetRenaming(s.DisplayName())
+}
+return m, nil
+}
+case "r":
+if m.focus != FocusInput {
+cmds = append(cmds, sdkListSessions(m.adapter))
+}
+case "t":
+if m.focus == FocusChat {
+m.chat.ToggleAllToolCalls()
+return m, nil
+}
+case "tab":
+switch m.focus {
+case FocusSidebar:
+m.focus = FocusChat
+m.input.Blur()
+case FocusChat:
+if m.selected != nil && m.canSend() {
+m.focus = FocusInput
+m.input.Focus()
+} else {
+m.focus = FocusSidebar
+m.input.Blur()
+}
+case FocusInput:
+m.focus = FocusSidebar
+m.input.Blur()
+}
+return m, nil
+case "shift+tab":
+switch m.focus {
+case FocusSidebar:
+if m.selected != nil && m.canSend() {
+m.focus = FocusInput
+m.input.Focus()
+} else {
+m.focus = FocusChat
+m.input.Blur()
+}
+case FocusChat:
+m.focus = FocusSidebar
+m.input.Blur()
+case FocusInput:
+m.focus = FocusChat
+m.input.Blur()
+}
+return m, nil
+case "enter":
+if m.focus == FocusSidebar && !m.sidebar.IsFiltering() {
+if s := m.sidebar.SelectedSession(); s != nil {
+m.selected = s
+m.focus = FocusChat
+m.unread[s.ID] = 0
+m.sidebar.SetActiveID(s.ID)
+m.sidebar.SetUnread(m.unread)
+m.sidebar.ClearFilterAndSetItems(m.sessions)
+m.input.SetSending(m.pendingSends[s.ID])
+if !m.pendingSends[s.ID] {
+m.input.Reset()
+}
+if !m.sdkResumed[s.ID] {
+cmds = append(cmds, sdkResumeSession(m.adapter, s.ID))
+} else {
+cmds = append(cmds, sdkLoadHistory(m.adapter, s.ID))
+}
+m.chat.SetPendingTools(m.pendingToolsForChat())
+}
+} else if m.focus == FocusInput {
+if m.renaming {
+// Complete rename
+newName := m.input.Value()
+if newName != "" && m.sidebar.SelectedSession() != nil {
+s := m.sidebar.SelectedSession()
+cmds = append(cmds, m.renameSession(s.ID, newName))
+}
+m.renaming = false
+m.input.Reset()
+m.input.ClearRenaming()
+m.focus = FocusSidebar
+m.input.Blur()
+} else {
+text := m.input.Value()
+if text != "" && m.selected != nil && !m.pendingSends[m.selected.ID] && m.sdkResumed[m.selected.ID] {
+m.pendingSends[m.selected.ID] = true
+m.input.SetSending(true)
+m.sidebar.SetPendingSends(m.pendingSends)
+m.input.Reset()
+cmds = append(cmds, sdkSendMessage(m.adapter, m.selected.ID, text))
+}
+}
+}
+}
 
-	case tea.MouseMsg:
-		// Determine which panel was clicked based on X coordinate
-		if msg.Action == tea.MouseActionPress || msg.Action == tea.MouseActionMotion {
-			if msg.Button == tea.MouseButtonLeft {
-				if msg.X < m.sidebar.Width+2 {
-					// Clicked on sidebar
-					if m.focus != FocusSidebar {
-						m.focus = FocusSidebar
-						m.input.Blur()
-					}
-				} else if m.height > 0 && msg.Y >= m.height-5 && m.selected != nil {
-					// Clicked on input area (bottom ~3 rows)
-					if m.focus != FocusInput && m.canSend() {
-						m.focus = FocusInput
-						m.input.Focus()
-					}
-				} else {
-					// Clicked on chat area
-					if m.focus != FocusChat {
-						m.focus = FocusChat
-						m.input.Blur()
-					}
-				}
-			}
-		}
+case tea.MouseMsg:
+// Determine which panel was clicked based on X coordinate
+if msg.Action == tea.MouseActionPress || msg.Action == tea.MouseActionMotion {
+if msg.Button == tea.MouseButtonLeft {
+if msg.X < m.sidebar.Width+2 {
+if m.focus != FocusSidebar {
+m.focus = FocusSidebar
+m.input.Blur()
+}
+} else if m.height > 0 && msg.Y >= m.height-5 && m.selected != nil {
+if m.focus != FocusInput && m.canSend() {
+m.focus = FocusInput
+m.input.Focus()
+}
+} else {
+if m.focus != FocusChat {
+m.focus = FocusChat
+m.input.Blur()
+}
+}
+}
+}
 
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.ready = true
-		// Border takes 2 rows (top+bottom) and 2 cols (left+right)
-		borderH := 2
-		borderW := 2
-		headerH := 1
-		statusBarH := 1
+case tea.WindowSizeMsg:
+m.width = msg.Width
+m.height = msg.Height
+m.ready = true
+borderH := 2
+borderW := 2
+headerH := 1
+statusBarH := 1
 
-		panelHeight := m.height - headerH - statusBarH - borderH
-		if panelHeight < 1 {
-			panelHeight = 1
-		}
-		sidebarInnerW := theme.SidebarWidth
-		chatInnerW := m.width - sidebarInnerW - borderW*2
-		if chatInnerW < 1 {
-			chatInnerW = 1
-		}
+panelHeight := m.height - headerH - statusBarH - borderH
+if panelHeight < 1 {
+panelHeight = 1
+}
+sidebarInnerW := theme.SidebarWidth
+chatInnerW := m.width - sidebarInnerW - borderW*2
+if chatInnerW < 1 {
+chatInnerW = 1
+}
 
-		m.sidebar.SetSize(sidebarInnerW, panelHeight)
+m.sidebar.SetSize(sidebarInnerW, panelHeight)
 
-		inputHeight := 1
-		inputBorderH := inputHeight + borderH
-		chatInnerH := panelHeight - inputBorderH
-		m.chat.SetSize(chatInnerW, chatInnerH)
-		m.input.SetWidth(chatInnerW)
+inputHeight := 1
+inputBorderH := inputHeight + borderH
+chatInnerH := panelHeight - inputBorderH
+m.chat.SetSize(chatInnerW, chatInnerH)
+m.input.SetWidth(chatInnerW)
 
-	case SessionsLoadedMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			return m, nil
-		}
-		m.sessions = msg.Sessions
-		m.sidebar.SetItems(msg.Sessions)
-		if m.watcher != nil {
-			for _, s := range msg.Sessions {
-				m.watcher.WatchSession(s.ID)
-			}
-		}
+case SessionsLoadedMsg:
+if msg.Err != nil {
+m.err = msg.Err
+return m, nil
+}
+m.sessions = msg.Sessions
+m.sidebar.SetItems(msg.Sessions)
 
-	case EventsLoadedMsg:
-		if msg.Err != nil {
-			m.err = msg.Err
-			return m, nil
-		}
-		if m.selected != nil && m.selected.ID == msg.SessionID {
-			m.chat.SetMessages(msg.Messages)
-		}
+case EventsLoadedMsg:
+if msg.Err != nil {
+m.err = msg.Err
+return m, nil
+}
+if m.selected != nil && m.selected.ID == msg.SessionID {
+m.chat.SetMessages(msg.Messages)
+}
 
-	case FileChangedMsg:
-		m.lastSeen[msg.SessionID] = time.Now()
-		m.sidebar.SetLastSeen(m.lastSeen)
-		if m.selected != nil && m.selected.ID == msg.SessionID {
-			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
-		} else {
-			m.unread[msg.SessionID]++
-			m.sidebar.SetUnread(m.unread)
-		}
-		m.sidebar.SetItems(m.sessions) // re-sort: unread sessions bubble up
-		if m.watcher != nil {
-			cmds = append(cmds, watchFiles(m.watcher))
-		}
+case TickMsg:
+cmds = append(cmds, sdkListSessions(m.adapter))
+cmds = append(cmds, tickEvery(5*time.Second))
 
-	case SessionDirChangedMsg:
-		cmds = append(cmds, loadSessions(m.repo))
-		if m.watcher != nil {
-			cmds = append(cmds, watchFiles(m.watcher))
-		}
+case MessageSentMsg:
+delete(m.pendingSends, msg.SessionID)
+m.sidebar.SetPendingSends(m.pendingSends)
+if m.selected != nil && m.selected.ID == msg.SessionID {
+m.input.SetSending(false)
+}
+if msg.Err != nil {
+m.err = msg.Err
+} else {
+m.input.Reset()
+}
 
-	case TickMsg:
-		// Periodic rescan for new sessions
-		if m.adapter != nil {
-			cmds = append(cmds, sdkListSessions(m.adapter))
-		} else {
-			cmds = append(cmds, loadSessions(m.repo))
-		}
-		cmds = append(cmds, tickEvery(5*time.Second))
+case SessionRenamedMsg:
+if msg.Err == nil {
+cmds = append(cmds, sdkListSessions(m.adapter))
+}
 
-	case MessageSentMsg:
-		delete(m.pendingSends, msg.SessionID)
-		m.sidebar.SetPendingSends(m.pendingSends)
-		// Only update input if we're still viewing the session that finished
-		if m.selected != nil && m.selected.ID == msg.SessionID {
-			m.input.SetSending(false)
-		}
-		if msg.Err != nil {
-			m.err = msg.Err
-		} else {
-			m.input.Reset()
-		}
+case ExportCompleteMsg:
+// Nothing to do in the model
 
-	case notifier.HookEventMsg:
-		// Hook event received from companion binary
-		if msg.SessionID != "" {
-			m.lastSeen[msg.SessionID] = time.Now()
-			m.sidebar.SetLastSeen(m.lastSeen)
-			// postToolUse means tool finished — clear pending tools for this session
-			if msg.Event == "postToolUse" {
-				delete(m.pendingTools, msg.SessionID)
-			}
-			if m.selected == nil || m.selected.ID != msg.SessionID {
-				m.unread[msg.SessionID]++
-				m.sidebar.SetUnread(m.unread)
-			} else {
-				cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
-				// Update chat with pending tools for selected session
-				m.chat.SetPendingTools(m.pendingToolsForChat())
-			}
-			m.sidebar.SetItems(m.sessions)
-		}
+case SDKConnectedMsg:
+if msg.Err != nil {
+m.statusFlash = fmt.Sprintf("⚠️  SDK init failed: %v", msg.Err)
+cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
+} else {
+m.statusFlash = "🔗 SDK connected"
+cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
+cmds = append(cmds, sdkListSessions(m.adapter))
+}
 
-	case notifier.HookPreToolMsg:
-		if msg.SessionID != "" {
-			m.pendingTools[msg.SessionID] = append(m.pendingTools[msg.SessionID], PendingTool{
-				ToolName:   msg.ToolName,
-				ToolArgs:   msg.ToolArgs,
-				Denied:     msg.Denied,
-				DenyReason: msg.DenyReason,
-			})
-			if m.selected != nil && m.selected.ID == msg.SessionID {
-				m.chat.SetPendingTools(m.pendingToolsForChat())
-			}
-		}
+case SDKSessionResumedMsg:
+if msg.Err != nil {
+m.statusFlash = fmt.Sprintf("⚠️  Resume failed: %v", msg.Err)
+cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
+} else {
+m.sdkResumed[msg.SessionID] = true
+cmds = append(cmds, sdkLoadHistory(m.adapter, msg.SessionID))
+}
 
-	case SessionRenamedMsg:
-		if msg.Err == nil {
-			cmds = append(cmds, loadSessions(m.repo))
-		}
+case SDKEventMsg:
+evt := msg.Event
+switch evt.Type {
+case copilot.EventSession:
+if evt.SessionEvent != nil {
+m.handleSDKSessionEvent(evt.SessionID, *evt.SessionEvent, &cmds)
+}
+case copilot.EventLifecycle:
+cmds = append(cmds, sdkListSessions(m.adapter))
+case copilot.EventPermission:
+if evt.Permission != nil {
+m.pendingTools[evt.SessionID] = append(m.pendingTools[evt.SessionID], PendingTool{
+ToolName: evt.Permission.ToolName,
+ToolArgs: evt.Permission.Action,
+})
+if m.selected != nil && m.selected.ID == evt.SessionID {
+m.chat.SetPendingTools(m.pendingToolsForChat())
+}
+// Auto-allow for now
+evt.Permission.Response <- copilot.PermissionResponse{Allow: true}
+}
+case copilot.EventUserInput:
+if evt.UserInput != nil {
+if m.selected != nil && m.selected.ID == evt.SessionID {
+msgs := m.chat.Messages()
+msgs = append(msgs, domain.Message{
+Role:    domain.RoleSystem,
+Content: fmt.Sprintf("🤖 Agent asks: %s", evt.UserInput.Question),
+})
+m.chat.SetMessages(msgs)
+}
+// Auto-respond for now
+evt.UserInput.Response <- copilot.UserInputResponse{Answer: "", WasFreeform: true}
+}
+}
+// Keep listening
+cmds = append(cmds, listenSDKEvents(m.adapter))
 
-	case ExportCompleteMsg:
-		// Nothing to do in the model; status bar could show a flash
+case SDKDisconnectedMsg:
+m.statusFlash = "⚠️  SDK disconnected"
+cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
 
-	case ApprovalFinishedMsg:
-		// TUI resumed after copilot handoff — reload events to see what happened
-		delete(m.pendingTools, msg.SessionID)
-		if m.selected != nil && m.selected.ID == msg.SessionID {
-			m.chat.SetPendingTools(nil)
-			cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
-		}
-		if msg.Err != nil {
-			m.statusFlash = fmt.Sprintf("⚠️  Session handoff failed: %v", msg.Err)
-			cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
-		}
-		cmds = append(cmds, loadSessions(m.repo))
+case ClearFlashMsg:
+m.statusFlash = ""
+}
 
-	case SDKConnectedMsg:
-		if msg.Err != nil {
-			m.statusFlash = fmt.Sprintf("⚠️  SDK init failed: %v", msg.Err)
-			cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
-		} else {
-			m.statusFlash = "🔗 SDK connected"
-			cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
-			// Use SDK for session listing
-			cmds = append(cmds, sdkListSessions(m.adapter))
-		}
+// Route input to focused panel
+switch m.focus {
+case FocusSidebar:
+var cmd tea.Cmd
+m.sidebar, cmd = m.sidebar.Update(msg)
+cmds = append(cmds, cmd)
+case FocusChat:
+var cmd tea.Cmd
+m.chat, cmd = m.chat.Update(msg)
+cmds = append(cmds, cmd)
+case FocusInput:
+var cmd tea.Cmd
+m.input, cmd = m.input.Update(msg)
+cmds = append(cmds, cmd)
+}
 
-	case SDKSessionResumedMsg:
-		if msg.Err != nil {
-			m.statusFlash = fmt.Sprintf("⚠️  Resume failed: %v", msg.Err)
-			cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
-			// Fall back to JSONL loading
-			if m.selected != nil && m.selected.ID == msg.SessionID {
-				if m.watcher != nil {
-					m.watcher.WatchSession(m.selected.ID)
-				}
-				cmds = append(cmds, loadEvents(m.repo.BasePath(), *m.selected))
-			}
-		} else {
-			m.sdkResumed[msg.SessionID] = true
-			// Load history from SDK
-			cmds = append(cmds, sdkLoadHistory(m.adapter, msg.SessionID))
-		}
-
-	case SDKEventMsg:
-		evt := msg.Event
-		switch evt.Type {
-		case copilot.EventSession:
-			if evt.SessionEvent != nil {
-				m.handleSDKSessionEvent(evt.SessionID, *evt.SessionEvent, &cmds)
-			}
-		case copilot.EventLifecycle:
-			// Session created/deleted/updated — refresh session list
-			cmds = append(cmds, sdkListSessions(m.adapter))
-		case copilot.EventPermission:
-			if evt.Permission != nil {
-				// For now, auto-allow permissions (Phase 8d will add interactive approval)
-				// Add to pending tools for display
-				m.pendingTools[evt.SessionID] = append(m.pendingTools[evt.SessionID], PendingTool{
-					ToolName: evt.Permission.ToolName,
-					ToolArgs: evt.Permission.Action,
-				})
-				if m.selected != nil && m.selected.ID == evt.SessionID {
-					m.chat.SetPendingTools(m.pendingToolsForChat())
-				}
-				// Auto-allow for now
-				evt.Permission.Response <- copilot.PermissionResponse{Allow: true}
-			}
-		case copilot.EventUserInput:
-			if evt.UserInput != nil {
-				// Display question as a system message and auto-respond
-				if m.selected != nil && m.selected.ID == evt.SessionID {
-					msgs := m.chat.Messages()
-					msgs = append(msgs, domain.Message{
-						Role:    domain.RoleSystem,
-						Content: fmt.Sprintf("🤖 Agent asks: %s", evt.UserInput.Question),
-					})
-					m.chat.SetMessages(msgs)
-				}
-				// Auto-respond with empty for now (user will need interactive modal later)
-				evt.UserInput.Response <- copilot.UserInputResponse{Answer: "", WasFreeform: true}
-			}
-		}
-		// Keep listening
-		if m.adapter != nil {
-			cmds = append(cmds, listenSDKEvents(m.adapter))
-		}
-
-	case SDKDisconnectedMsg:
-		m.statusFlash = "⚠️  SDK disconnected"
-		cmds = append(cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
-
-	case ClearFlashMsg:
-		m.statusFlash = ""
-	}
-
-	// Route input to focused panel
-	switch m.focus {
-	case FocusSidebar:
-		var cmd tea.Cmd
-		m.sidebar, cmd = m.sidebar.Update(msg)
-		cmds = append(cmds, cmd)
-	case FocusChat:
-		var cmd tea.Cmd
-		m.chat, cmd = m.chat.Update(msg)
-		cmds = append(cmds, cmd)
-	case FocusInput:
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		cmds = append(cmds, cmd)
-	}
-
-	return m, tea.Batch(cmds...)
+return m, tea.Batch(cmds...)
 }
 
 // renameSession updates the summary field in workspace.yaml.
 func (m Model) renameSession(sessionID, newName string) tea.Cmd {
-	return func() tea.Msg {
-		wsPath := filepath.Join(m.repo.BasePath(), sessionID, "workspace.yaml")
-		data, err := os.ReadFile(wsPath)
-		if err != nil {
-			return SessionRenamedMsg{SessionID: sessionID, Err: err}
-		}
+return func() tea.Msg {
+wsPath := filepath.Join(m.sessionBasePath, sessionID, "workspace.yaml")
+data, err := os.ReadFile(wsPath)
+if err != nil {
+return SessionRenamedMsg{SessionID: sessionID, Err: err}
+}
 
-		var ws map[string]interface{}
-		if err := yaml.Unmarshal(data, &ws); err != nil {
-			return SessionRenamedMsg{SessionID: sessionID, Err: err}
-		}
+var ws map[string]interface{}
+if err := yaml.Unmarshal(data, &ws); err != nil {
+return SessionRenamedMsg{SessionID: sessionID, Err: err}
+}
 
-		ws["summary"] = newName
-		out, err := yaml.Marshal(ws)
-		if err != nil {
-			return SessionRenamedMsg{SessionID: sessionID, Err: err}
-		}
+ws["summary"] = newName
+out, err := yaml.Marshal(ws)
+if err != nil {
+return SessionRenamedMsg{SessionID: sessionID, Err: err}
+}
 
-		if err := os.WriteFile(wsPath, out, 0600); err != nil {
-			return SessionRenamedMsg{SessionID: sessionID, Err: err}
-		}
+if err := os.WriteFile(wsPath, out, 0600); err != nil {
+return SessionRenamedMsg{SessionID: sessionID, Err: err}
+}
 
-		return SessionRenamedMsg{SessionID: sessionID}
-	}
+return SessionRenamedMsg{SessionID: sessionID}
+}
 }
 
 // exportConversation writes the current conversation to a markdown file.
 func (m Model) exportConversation() tea.Cmd {
-	return func() tea.Msg {
-		if m.selected == nil {
-			return ExportCompleteMsg{Err: fmt.Errorf("no session selected")}
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("# Copilot Session: %s\n\n", m.selected.DisplayName()))
-		sb.WriteString(fmt.Sprintf("- **Session ID**: `%s`\n", m.selected.ID))
-		sb.WriteString(fmt.Sprintf("- **CWD**: `%s`\n", m.selected.CWD))
-		sb.WriteString(fmt.Sprintf("- **Created**: %s\n", m.selected.CreatedAt.Format(time.RFC3339)))
-		sb.WriteString(fmt.Sprintf("- **Updated**: %s\n\n", m.selected.UpdatedAt.Format(time.RFC3339)))
-		sb.WriteString("---\n\n")
-
-		msgs := m.chat.Messages()
-		for _, msg := range msgs {
-			ts := msg.Timestamp.Format("15:04:05")
-			switch msg.Role {
-			case domain.RoleUser:
-				sb.WriteString(fmt.Sprintf("### 🧑 You (%s)\n\n%s\n\n", ts, msg.Content))
-			case domain.RoleAssistant:
-				sb.WriteString(fmt.Sprintf("### 🤖 Copilot (%s)\n\n", ts))
-				if msg.Content != "" {
-					sb.WriteString(msg.Content + "\n\n")
-				}
-				for _, tc := range msg.ToolCalls {
-					status := "⏳"
-					if tc.Status == domain.ToolCallComplete {
-						status = "✓"
-					} else if tc.Status == domain.ToolCallFailed {
-						status = "✗"
-					}
-					sb.WriteString(fmt.Sprintf("- 🔧 **%s** %s", tc.Name, status))
-					if tc.Summary != "" {
-						summary := tc.Summary
-						if len(summary) > 100 {
-							summary = summary[:97] + "..."
-						}
-						sb.WriteString(fmt.Sprintf(": `%s`", summary))
-					}
-					sb.WriteString("\n")
-				}
-				sb.WriteString("\n")
-			case domain.RoleSystem:
-				sb.WriteString(fmt.Sprintf("*ℹ %s* (%s)\n\n", msg.Content, ts))
-			}
-		}
-
-		exportDir := "."
-		if m.cfg != nil && m.cfg.ExportDir != "" {
-			exportDir = m.cfg.ExportDir
-		}
-
-		filename := fmt.Sprintf("copilot-session-%s.md", m.selected.ShortID())
-		outPath := filepath.Join(exportDir, filename)
-		if err := os.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
-			return ExportCompleteMsg{Err: err}
-		}
-
-		return ExportCompleteMsg{Path: outPath}
-	}
+return func() tea.Msg {
+if m.selected == nil {
+return ExportCompleteMsg{Err: fmt.Errorf("no session selected")}
 }
 
-// pendingToolsForChat returns pending tools for the currently selected session
-// in the format the chat panel expects.
+var sb strings.Builder
+sb.WriteString(fmt.Sprintf("# Copilot Session: %s\n\n", m.selected.DisplayName()))
+sb.WriteString(fmt.Sprintf("- **Session ID**: `%s`\n", m.selected.ID))
+sb.WriteString(fmt.Sprintf("- **CWD**: `%s`\n", m.selected.CWD))
+sb.WriteString(fmt.Sprintf("- **Created**: %s\n", m.selected.CreatedAt.Format(time.RFC3339)))
+sb.WriteString(fmt.Sprintf("- **Updated**: %s\n\n", m.selected.UpdatedAt.Format(time.RFC3339)))
+sb.WriteString("---\n\n")
+
+msgs := m.chat.Messages()
+for _, msg := range msgs {
+ts := msg.Timestamp.Format("15:04:05")
+switch msg.Role {
+case domain.RoleUser:
+sb.WriteString(fmt.Sprintf("### 🧑 You (%s)\n\n%s\n\n", ts, msg.Content))
+case domain.RoleAssistant:
+sb.WriteString(fmt.Sprintf("### 🤖 Copilot (%s)\n\n", ts))
+if msg.Content != "" {
+sb.WriteString(msg.Content + "\n\n")
+}
+for _, tc := range msg.ToolCalls {
+status := "⏳"
+if tc.Status == domain.ToolCallComplete {
+status = "✓"
+} else if tc.Status == domain.ToolCallFailed {
+status = "✗"
+}
+sb.WriteString(fmt.Sprintf("- 🔧 **%s** %s", tc.Name, status))
+if tc.Summary != "" {
+summary := tc.Summary
+if len(summary) > 100 {
+summary = summary[:97] + "..."
+}
+sb.WriteString(fmt.Sprintf(": `%s`", summary))
+}
+sb.WriteString("\n")
+}
+sb.WriteString("\n")
+case domain.RoleSystem:
+sb.WriteString(fmt.Sprintf("*ℹ %s* (%s)\n\n", msg.Content, ts))
+}
+}
+
+exportDir := "."
+if m.cfg != nil && m.cfg.ExportDir != "" {
+exportDir = m.cfg.ExportDir
+}
+
+filename := fmt.Sprintf("copilot-session-%s.md", m.selected.ShortID())
+outPath := filepath.Join(exportDir, filename)
+if err := os.WriteFile(outPath, []byte(sb.String()), 0644); err != nil {
+return ExportCompleteMsg{Err: err}
+}
+
+return ExportCompleteMsg{Path: outPath}
+}
+}
+
+// pendingToolsForChat returns pending tools for the currently selected session.
 func (m Model) pendingToolsForChat() []chat.PendingTool {
-	if m.selected == nil {
-		return nil
-	}
-	tools := m.pendingTools[m.selected.ID]
-	if len(tools) == 0 {
-		return nil
-	}
-	result := make([]chat.PendingTool, len(tools))
-	for i, t := range tools {
-		result[i] = chat.PendingTool{
-			ToolName:   t.ToolName,
-			ToolArgs:   t.ToolArgs,
-			Denied:     t.Denied,
-			DenyReason: t.DenyReason,
-		}
-	}
-	return result
+if m.selected == nil {
+return nil
+}
+tools := m.pendingTools[m.selected.ID]
+if len(tools) == 0 {
+return nil
+}
+result := make([]chat.PendingTool, len(tools))
+for i, t := range tools {
+result[i] = chat.PendingTool{
+ToolName:   t.ToolName,
+ToolArgs:   t.ToolArgs,
+Denied:     t.Denied,
+DenyReason: t.DenyReason,
+}
+}
+return result
 }
 
-// canSend returns true if the user can send messages (SDK resumed or runner available).
+// canSend returns true if the user can send messages to the selected session.
 func (m Model) canSend() bool {
-	if m.adapter != nil && m.selected != nil && m.sdkResumed[m.selected.ID] {
-		return true
-	}
-	return m.runner != nil
+return m.selected != nil && m.sdkResumed[m.selected.ID]
 }
 
 // handleSDKSessionEvent processes a single SDK session event.
 func (m *Model) handleSDKSessionEvent(sessionID string, event sdk.SessionEvent, cmds *[]tea.Cmd) {
-	m.lastSeen[sessionID] = time.Now()
-	m.sidebar.SetLastSeen(m.lastSeen)
+m.lastSeen[sessionID] = time.Now()
+m.sidebar.SetLastSeen(m.lastSeen)
 
-	switch event.Type {
-	case sdk.AssistantMessageDelta:
-		// Streaming chunk — update chat if viewing this session
-		if m.selected != nil && m.selected.ID == sessionID {
-			if event.Data.DeltaContent != nil {
-				msgs := m.chat.Messages()
-				// Append to last assistant message or create new one
-				if len(msgs) > 0 && msgs[len(msgs)-1].Role == domain.RoleAssistant {
-					msgs[len(msgs)-1].Content += *event.Data.DeltaContent
-				} else {
-					msgs = append(msgs, domain.Message{
-						Role:    domain.RoleAssistant,
-						Content: *event.Data.DeltaContent,
-					})
-				}
-				m.chat.SetMessages(msgs)
-			}
-		} else {
-			m.unread[sessionID]++
-			m.sidebar.SetUnread(m.unread)
-		}
+switch event.Type {
+case sdk.AssistantMessageDelta:
+if m.selected != nil && m.selected.ID == sessionID {
+if event.Data.DeltaContent != nil {
+msgs := m.chat.Messages()
+if len(msgs) > 0 && msgs[len(msgs)-1].Role == domain.RoleAssistant {
+msgs[len(msgs)-1].Content += *event.Data.DeltaContent
+} else {
+msgs = append(msgs, domain.Message{
+Role:    domain.RoleAssistant,
+Content: *event.Data.DeltaContent,
+})
+}
+m.chat.SetMessages(msgs)
+}
+} else {
+m.unread[sessionID]++
+m.sidebar.SetUnread(m.unread)
+}
 
-	case sdk.AssistantMessage:
-		// Final message — replace streamed content with final version
-		if m.selected != nil && m.selected.ID == sessionID {
-			if event.Data.Content != nil {
-				msgs := m.chat.Messages()
-				if len(msgs) > 0 && msgs[len(msgs)-1].Role == domain.RoleAssistant {
-					msgs[len(msgs)-1].Content = *event.Data.Content
-				} else {
-					msgs = append(msgs, domain.Message{
-						Role:    domain.RoleAssistant,
-						Content: *event.Data.Content,
-					})
-				}
-				m.chat.SetMessages(msgs)
-			}
-		}
+case sdk.AssistantMessage:
+if m.selected != nil && m.selected.ID == sessionID {
+if event.Data.Content != nil {
+msgs := m.chat.Messages()
+if len(msgs) > 0 && msgs[len(msgs)-1].Role == domain.RoleAssistant {
+msgs[len(msgs)-1].Content = *event.Data.Content
+} else {
+msgs = append(msgs, domain.Message{
+Role:    domain.RoleAssistant,
+Content: *event.Data.Content,
+})
+}
+m.chat.SetMessages(msgs)
+}
+}
 
-	case sdk.ToolExecutionStart:
-		toolName := ""
-		if event.Data.ToolName != nil {
-			toolName = *event.Data.ToolName
-		}
-		m.pendingTools[sessionID] = append(m.pendingTools[sessionID], PendingTool{
-			ToolName: toolName,
-		})
-		if m.selected != nil && m.selected.ID == sessionID {
-			m.chat.SetPendingTools(m.pendingToolsForChat())
-		}
+case sdk.ToolExecutionStart:
+toolName := ""
+if event.Data.ToolName != nil {
+toolName = *event.Data.ToolName
+}
+m.pendingTools[sessionID] = append(m.pendingTools[sessionID], PendingTool{
+ToolName: toolName,
+})
+if m.selected != nil && m.selected.ID == sessionID {
+m.chat.SetPendingTools(m.pendingToolsForChat())
+}
 
-	case sdk.ToolExecutionComplete:
-		// Remove matching pending tool
-		toolName := ""
-		if event.Data.ToolName != nil {
-			toolName = *event.Data.ToolName
-		}
-		if tools, ok := m.pendingTools[sessionID]; ok {
-			var remaining []PendingTool
-			removed := false
-			for _, t := range tools {
-				if !removed && t.ToolName == toolName {
-					removed = true
-					continue
-				}
-				remaining = append(remaining, t)
-			}
-			m.pendingTools[sessionID] = remaining
-		}
-		if m.selected != nil && m.selected.ID == sessionID {
-			m.chat.SetPendingTools(m.pendingToolsForChat())
-		}
+case sdk.ToolExecutionComplete:
+toolName := ""
+if event.Data.ToolName != nil {
+toolName = *event.Data.ToolName
+}
+if tools, ok := m.pendingTools[sessionID]; ok {
+var remaining []PendingTool
+removed := false
+for _, t := range tools {
+if !removed && t.ToolName == toolName {
+removed = true
+continue
+}
+remaining = append(remaining, t)
+}
+m.pendingTools[sessionID] = remaining
+}
+if m.selected != nil && m.selected.ID == sessionID {
+m.chat.SetPendingTools(m.pendingToolsForChat())
+}
 
-	case sdk.SessionIdle:
-		// Prompt complete
-		delete(m.pendingSends, sessionID)
-		m.sidebar.SetPendingSends(m.pendingSends)
-		if m.selected != nil && m.selected.ID == sessionID {
-			m.input.SetSending(false)
-		}
+case sdk.SessionIdle:
+delete(m.pendingSends, sessionID)
+m.sidebar.SetPendingSends(m.pendingSends)
+if m.selected != nil && m.selected.ID == sessionID {
+m.input.SetSending(false)
+}
 
-	case sdk.SessionError:
-		errMsg := "unknown error"
-		if event.Data.Message != nil {
-			errMsg = *event.Data.Message
-		}
-		m.statusFlash = fmt.Sprintf("⚠️  %s", errMsg)
-		*cmds = append(*cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
-	}
+case sdk.SessionError:
+errMsg := "unknown error"
+if event.Data.Message != nil {
+errMsg = *event.Data.Message
+}
+m.statusFlash = fmt.Sprintf("⚠️  %s", errMsg)
+*cmds = append(*cmds, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg { return ClearFlashMsg{} }))
+}
 
-	m.sidebar.SetItems(m.sessions)
+m.sidebar.SetItems(m.sessions)
 }
