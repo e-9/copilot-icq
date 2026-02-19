@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/app"
+	"github.com/e-9/copilot-icq/internal/copilot"
 	"github.com/e-9/copilot-icq/internal/config"
 	"github.com/e-9/copilot-icq/internal/infra/hookserver"
 	"github.com/e-9/copilot-icq/internal/infra/notifier"
@@ -47,6 +48,12 @@ func main() {
 
 	repo := sessionrepo.New(cfg.SessionStatePath)
 
+	// SDK mode: use official Copilot SDK
+	var adapter *copilot.Adapter
+	if appCfg.UseSDK {
+		adapter = copilot.New()
+	}
+
 	w, err := watcher.New(cfg.SessionStatePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating watcher: %v\n", err)
@@ -75,7 +82,7 @@ func main() {
 		go hookSrv.Start()
 	}
 
-	model := app.NewModel(repo, w, r, appCfg)
+	model := app.NewModel(repo, w, r, appCfg, adapter)
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 

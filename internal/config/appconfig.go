@@ -14,6 +14,7 @@ type AppConfig struct {
 	DeniedTools    []string `yaml:"denied_tools"`     // tools blocked via preToolUse hook
 	DeniedPatterns []string `yaml:"denied_patterns"`  // arg patterns blocked via preToolUse hook
 	ExportDir      string   `yaml:"export_dir"`       // directory for conversation exports
+	UseSDK         bool     `yaml:"use_sdk"`           // use official Copilot SDK for session management
 	Notifications  struct {
 		OS    bool   `yaml:"os"`    // enable OS desktop notifications
 		Push  bool   `yaml:"push"`  // enable ntfy.sh push notifications

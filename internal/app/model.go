@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/e-9/copilot-icq/internal/config"
+	"github.com/e-9/copilot-icq/internal/copilot"
 	"github.com/e-9/copilot-icq/internal/domain"
 	"github.com/e-9/copilot-icq/internal/infra/runner"
 	"github.com/e-9/copilot-icq/internal/infra/sessionrepo"
@@ -47,6 +48,8 @@ type Model struct {
 	pendingSends map[string]bool          // sessionID → has in-flight copilot subprocess
 	pendingTools map[string][]PendingTool // sessionID → tools awaiting execution
 	cfg          *config.AppConfig        // user configuration
+	adapter      *copilot.Adapter          // SDK adapter (nil if not using SDK mode)
+	sdkResumed   map[string]bool           // sessionID → resumed via SDK
 }
 
 // PendingTool represents a tool about to be executed, received via preToolUse hook.
@@ -58,7 +61,7 @@ type PendingTool struct {
 }
 
 // NewModel creates the initial application model.
-func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg *config.AppConfig) Model {
+func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg *config.AppConfig, adapter *copilot.Adapter) Model {
 	return Model{
 		repo:     repo,
 		watcher:  w,
@@ -71,13 +74,21 @@ func NewModel(repo *sessionrepo.Repo, w *watcher.Watcher, r *runner.Runner, cfg 
 		pendingSends: make(map[string]bool),
 		pendingTools: make(map[string][]PendingTool),
 		cfg:          cfg,
+		adapter:      adapter,
+		sdkResumed:   make(map[string]bool),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		loadSessions(m.repo),
-		watchFiles(m.watcher),
-		tickEvery(5*time.Second),
-	)
+		tickEvery(5 * time.Second),
+	}
+	if m.watcher != nil {
+		cmds = append(cmds, watchFiles(m.watcher))
+	}
+	if m.adapter != nil {
+		cmds = append(cmds, sdkStart(m.adapter), listenSDKEvents(m.adapter))
+	}
+	return tea.Batch(cmds...)
 }
